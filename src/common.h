@@ -49,6 +49,17 @@ extern Btn bL, bR;
 // returns 0 = nothing, 1 = pressed, 2 = released
 int updateBtn(Btn &b, uint32_t now);
 
+// Button events waiting for the next fixed game tick. The loop runs faster than
+// the 16 ms tick, so an event seen in a loop pass without a tick would be lost;
+// queued, it reaches the next tick instead. Holds two (a press and its release).
+struct EvQ {
+  int8_t q[2];
+  EvQ() { clear(); }
+  void push(int e) { if (!e) return; if (!q[0]) q[0] = e; else q[1] = e; }
+  int pop() { int e = q[0]; q[0] = q[1]; q[1] = 0; return e; }
+  void clear() { q[0] = q[1] = 0; }
+};
+
 void drawCell(int px, int py, int sz, uint16_t col);
 // 0 -> 1 -> 0 over `period` ms, for back-and-forth icon animations
 float triWave(uint32_t t, uint32_t period);
@@ -92,6 +103,9 @@ void drawGameOverBox(const char *title, uint32_t score, uint32_t best, bool newH
 // that started on the screen.
 enum EndChoice { END_NONE, END_PLAY, END_MENU };
 EndChoice startOrEnd(bool gameOver, int eL, int eR, bool &armed);
+// Tools: "L <l>   R <r>" at the bottom, with a "hold L: menu" hint above it
+void drawToolFooter(const char *l, const char *r);
+static const uint32_t TOOL_HOLD_MS = 600;   // hold L this long to leave a tool
 
 // ---------------- games ----------------
 // Each game: begin() shows its title screen, update() runs one loop iteration,
@@ -153,10 +167,25 @@ DECLARE_GAME(tank)
 DECLARE_GAME(gravity)
 DECLARE_GAME(slots)
 DECLARE_GAME(subgame)
+DECLARE_GAME(knife)
+DECLARE_GAME(dodge)
+DECLARE_GAME(fish)
+DECLARE_GAME(bowl)
+DECLARE_GAME(reversi)
 
 DECLARE_GAME(timer)                   // tools (use the same entry points)
 namespace timer { void menuInfo(char *buf, size_t n); }
 DECLARE_GAME(torch)
 namespace torch { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(dice)
+namespace dice { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(tally)
+namespace tally { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(minute)
+namespace minute { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(morse)
+namespace morse { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(breathe)
+namespace breathe { void menuInfo(char *buf, size_t n); }
 DECLARE_GAME(settings)                // not a game, but uses the same entry points
 namespace settings { void menuInfo(char *buf, size_t n); }

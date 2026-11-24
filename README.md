@@ -1,14 +1,14 @@
 # 🎮 TTGO-Arcade
 
 > Retro arcade game collection for the **LilyGO TTGO T-Display V1.1** (ESP32).  
-> Featuring **50 playable two-button games**, **2 pocket tools**, a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
+> Featuring **55 playable two-button games**, **7 pocket tools**, a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
 
 ---
 
 ## ✨ Features
 
-- **50 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
-- **2 Pocket Tools** — Built-in **Stopwatch/Timer** (with lap tracking) and **Flashlight** (White, Warm, Red, SOS, Strobe).
+- **55 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
+- **7 Pocket Tools** — **Stopwatch** (with laps), **Flashlight** (White, Warm, Red, SOS, Strobe), **Dice** (dice, coin, D20, 1-100, yes/no), **Tally** two-player counter, **Countdown** timer with flashing alarm, **Morse** keyer/decoder and guided **Breathing**.
 - **Smooth Animated Menu** — 60 fps scrolling list with live animated game icons, mini battery/USB status badge, and fast scroll on `Hold L`.
 - **Persistent Saves (NVS)** — Remembers high scores, last played game, brightness, auto-sleep timer, and USB logging state across power-offs.
 - **Power & Diagnostics** — 5 brightness levels, configurable auto-sleep (`30s` / `60s` / `2m` / `5m` / `Off`), deep sleep with single-button wake, battery voltage curve, and crash reporting.
@@ -26,10 +26,11 @@ The board has two buttons:
 - **Menu**: `Tap L` next item · `Hold L` fast scroll · `Tap R` open / play
 - **Title Screen**: press any button to start
 - **Game Over**: `L` return to menu · `R` play again
+- **Tools**: `Hold L` returns to the menu (Torch: `Tap R`)
 
 ---
 
-## 🎯 Games (50)
+## 🎯 Games (55)
 
 ### Arcade & Action
 | Game | Controls | Goal |
@@ -48,6 +49,7 @@ The board has two buttons:
 | **Snake** | `Tap L / R` turn left/right (relative) | Eat food, avoid walls and yourself |
 | **Tron** | `Tap L / R` turn 90° left/right | Light cycles: trap the AI in your trail; each round is faster |
 | **Tank** | `Hold L / R` aim barrel · `Hold L + R` charge, release to fire | Artillery duel vs a CPU tank over hills and wind; 3 HP each |
+| **Dodge** | `Hold L / R` move | Survive changing bullet patterns; skim bullets for graze points; one hit |
 | **Sub** | `Hold L` dive · `Hold R` rise · `L + R` torpedo | Grab sea-floor chests, sink sharks & mines, surface for oxygen; 3 hulls |
 
 ### Endless Runners, Jumpers & Dodgers
@@ -77,6 +79,9 @@ The board has two buttons:
 | **Catch** | `Hold L / R` move basket | Catch coins & gems, avoid red bombs; 3 lives |
 | **Whack** | `Tap L / R` whack left/right burrow | Hit moles (+10 / +30), skip red bombs; 3 lives |
 | **Golf** | `Hold L / R` aim · `Hold & release L + R` putt | Sink holes before running out of shots (+3 shots/hole) |
+| **Knife** | `Tap L / R` throw | Stick knives in a spinning log without hitting the others; boss every 5 stages |
+| **Bowl** | `Tap L / R` set spot, then aim · `Hold L / R` hook | 10-pin bowling, real scoring with strikes & spares (300 max) |
+| **Fish** | `Hold L / R` move boat · `L + R` reel in | 60 s of fishing: deep fish pay more, jellyfish steal, sharks cut the line |
 | **Plinko** | `Tap L / R` drop ball · `Hold L / R` nudge balls | 12 balls through a peg board; the 100 slot gives a free ball |
 | **Math** | `Tap L` false · `Tap R` true | Judge equations before the timer bar empties; 3 lives |
 
@@ -95,6 +100,7 @@ The board has two buttons:
 | **Pop** | `Tap L` next tile · `Hold L` next row · `Tap R` pop group | Pop groups of 2+ same tiles; bigger groups score much more |
 | **Lights** | `Tap L` next cell · `Hold L` next row · `Tap R` toggle | Lights Out 5×5: switch every light off within the move limit |
 | **Code** | `Tap L` cycle color · `Hold L` previous peg · `Tap R` next peg / submit | Crack the hidden 4-peg color code from the clues |
+| **Reversi** | `Tap L` next move · `Hold L` previous · `Tap R` place | Othello-style vs the CPU; score = your discs (+30 for a win) |
 | **Drop 4** | `Tap L` next column · `Tap R` drop disc | Connect four vs the CPU; keep your win streak going |
 
 ---
@@ -105,6 +111,11 @@ The board has two buttons:
 |---|---|---|
 | **Timer** | `Tap R` start/stop · `Tap L` lap/reset · `Hold L` menu | Precision stopwatch with up to 5 lap splits |
 | **Torch** | `Tap L` cycle mode · `Tap R` menu | Full-screen flashlight at max brightness (`White`, `Warm`, `Red`, `SOS`, `Strobe`) |
+| **Dice** | `Tap L` mode · `Tap R` roll · `Hold L` menu | 1–5 dice with total, coin flip, D20, 1–100 or yes/no (mode is remembered) |
+| **Tally** | `Tap L` A +1 · `Tap R` B +1 · `Hold R` undo · `Hold L + R` reset · `Hold L` menu | Two-player score counter, saved across sleep and power-off |
+| **Minute** | `Tap L` preset / +1 min / reset · `Tap R` start / pause · `Hold L` menu | Countdown (1–60 min presets); the screen flashes at full brightness when time is up |
+| **Morse** | `Tap L` dot · `Tap R` dash · `Hold R` delete · `Hold L` menu | Morse keyer: decodes what you tap, with a live cheat sheet of matching letters |
+| **Breathe** | `Tap L` pattern · `Tap R` start / pause · `Hold L` menu | Guided breathing (Box 4-4-4-4, Relax 4-7-8, Calm 5-5) with an animated circle |
 
 ---
 
@@ -150,6 +161,7 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
     ├── settings.cpp      # Settings UI, Reset Scores submenu & confirmation modal
     ├── timer.cpp         # Stopwatch tool
     ├── torch.cpp         # Flashlight tool
+    ├── dice.cpp, tally.cpp, minute.cpp, morse.cpp, breathe.cpp   # Other tools
     └── <game>.cpp        # One self-contained namespace per game
 ```
 

@@ -319,6 +319,8 @@ void begin() {
   dirty = true;
 }
 
+static EvQ qL, qR;                 // button events waiting for the next tick
+
 void update(uint32_t now) {
   int eL = updateBtn(bL, now);
   int eR = updateBtn(bR, now);
@@ -332,19 +334,18 @@ void update(uint32_t now) {
       lHeld = false;
       gameOver(true);
     }
-    // events wait for the next tick, so one between two ticks still counts
-    static int qL = 0, qR = 0;
-    if (eL == 2 && lHeld) { qL = 2; lHeld = false; }
-    if (eR == 1) qR = 1;
+    if (eL == 2 && lHeld) { qL.push(2); lHeld = false; }
+    if (eR == 1) qR.push(1);
     if (now - lastTick > 200) lastTick = now - TICK_MS;
     while (state == PLAY && now - lastTick >= TICK_MS) {
       lastTick += TICK_MS;
-      tick(qL, qR);
-      qL = qR = 0;
+      tick(qL.pop(), qR.pop());
       dirty = true;
     }
     if (state == PLAY && winFlash == 0 && !spinning && idleTooLong(now, lastInput)) goToSleep();
   } else {
+    qL.clear();
+    qR.clear();
     if (startOrEnd(state == GAMEOVER, eL, eR, armed) == END_PLAY) newGame();
     if (idleTooLong(now, lastInput)) goToSleep();
   }

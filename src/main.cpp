@@ -1,6 +1,6 @@
 // Games for LilyGO TTGO T-Display V1.1 (ESP32, ST7789 135x240)
 //
-// 50 two-button games (see README.md), plus Timer and Torch tools.
+// 55 two-button games and 7 pocket tools (see README.md).
 // On boot a menu lets you pick a game, open Settings (battery, brightness,
 // USB logging, last crash) or put the board to sleep:
 //   Tap L : next entry
@@ -94,6 +94,19 @@ EndChoice startOrEnd(bool gameOver, int eL, int eR, bool &armed) {
     return END_MENU;
   }
   return END_PLAY;
+}
+
+void drawToolFooter(const char *l, const char *r) {
+  spr.setTextDatum(TC_DATUM);
+  spr.setTextColor(TFT_DARKGREY);
+  spr.drawString("hold L: menu", 67, 206, 1);
+  spr.setTextDatum(TL_DATUM);
+  spr.setTextColor(TFT_YELLOW);
+  spr.drawString("L", 10, 220, 2);
+  spr.drawString("R", 70, 220, 2);
+  spr.setTextColor(TFT_WHITE);
+  spr.drawString(l, 22, 220, 2);
+  spr.drawString(r, 82, 220, 2);
 }
 
 // ---------------- sleep entry ----------------
@@ -197,8 +210,18 @@ static const MenuItem ITEMS[] = {
   GAME("Gravity", "gravity_hi", gravity),
   GAME("Slots",  "slots_hi",   slots),
   GAME("Sub",    "sub_hi",     subgame),
+  GAME("Knife",  "knife_hi",   knife),
+  GAME("Dodge",  "dodge_hi",   dodge),
+  GAME("Fish",   "fish_hi",    fish),
+  GAME("Bowl",   "bowl_hi",    bowl),
+  GAME("Reversi", "reversi_hi", reversi),
   {"Timer",    nullptr, timer::begin,    timer::update,    timer::drawIcon,    timer::menuInfo,    "open"},
   {"Torch",    nullptr, torch::begin,    torch::update,    torch::drawIcon,    torch::menuInfo,    "open"},
+  {"Dice",     nullptr, dice::begin,     dice::update,     dice::drawIcon,     dice::menuInfo,     "open"},
+  {"Tally",    nullptr, tally::begin,    tally::update,    tally::drawIcon,    tally::menuInfo,    "open"},
+  {"Minute",   nullptr, minute::begin,   minute::update,   minute::drawIcon,   minute::menuInfo,   "open"},
+  {"Morse",    nullptr, morse::begin,    morse::update,    morse::drawIcon,    morse::menuInfo,    "open"},
+  {"Breathe",  nullptr, breathe::begin,  breathe::update,  breathe::drawIcon,  breathe::menuInfo,  "open"},
   {"Settings", nullptr, settings::begin, settings::update, settings::drawIcon, settings::menuInfo, "open"},
   {"Sleep",    nullptr, sleepNow,        nullptr,          sleepIcon,          sleepInfo,          "sleep"},
 };

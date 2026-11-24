@@ -239,24 +239,25 @@ void begin() {
   dirty = true;
 }
 
+static EvQ qL, qR;                 // button events waiting for the next tick
+
 void update(uint32_t now) {
   int eL = updateBtn(bL, now);
   int eR = updateBtn(bR, now);
   if (eL || eR || bL.stable || bR.stable) lastInput = now;
 
   if (state == PLAY) {
-    // presses wait for the next tick, so a press between two ticks still counts
-    static int qL = 0, qR = 0;
-    if (eL == 1) qL = 1;
-    if (eR == 1) qR = 1;
+    qL.push(eL);
+    qR.push(eR);
     if (now - lastTick > 200) lastTick = now - TICK_MS;
     while (state == PLAY && now - lastTick >= TICK_MS) {
       lastTick += TICK_MS;
-      tick(qL, qR);
-      qL = qR = 0;
+      tick(qL.pop(), qR.pop());
       dirty = true;
     }
   } else {
+    qL.clear();
+    qR.clear();
     if (startOrEnd(state == GAMEOVER, eL, eR, armed) == END_PLAY) newGame();
     if (idleTooLong(now, lastInput)) goToSleep();
   }

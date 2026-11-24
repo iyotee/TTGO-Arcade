@@ -214,6 +214,8 @@ void begin() {
   dirty = true;
 }
 
+static EvQ qR;                     // R events waiting for the next tick
+
 void update(uint32_t now) {
   int eL = updateBtn(bL, now);
   int eR = updateBtn(bR, now);
@@ -221,14 +223,14 @@ void update(uint32_t now) {
 
   if (state == PLAY) {
     if (now - lastTick > 200) lastTick = now - TICK_MS;
-    bool first = true;
+    qR.push(eR);
     while (state == PLAY && now - lastTick >= TICK_MS) {
       lastTick += TICK_MS;
-      tick(first ? eR : 0);
-      first = false;
+      tick(qR.pop());
       dirty = true;
     }
   } else {
+    qR.clear();
     if (startOrEnd(state == GAMEOVER, eL, eR, armed) == END_PLAY) newGame();
     if (idleTooLong(now, lastInput)) goToSleep();
   }
