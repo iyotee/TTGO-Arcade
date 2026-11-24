@@ -106,6 +106,23 @@ void wifiStopWps();
 void wifiForget();
 void wifiShutdown();                  // before deep sleep
 
+// ---------------- themes (theme.cpp) ----------------
+// UI palette; "Original" is the default, "Neon" goes with neon Tigo
+struct Theme {
+  bool neon;
+  uint16_t bg, panel, frame, frameSel, text, textDim, accent, accent2, ok, keyHint;
+};
+static const int NUM_THEMES = 2;
+const Theme &theme();
+int themeIndex();
+void setThemeIndex(int i);            // saved
+const char *themeName(int i);
+// an outlined rounded box; in the neon theme it gets a soft glow around it
+void drawThemedBox(int x, int y, int w, int h, int r, uint16_t col, bool glow);
+
+// ---------------- OTA (otaui.cpp, opened from Settings) ----------------
+namespace otaui { void open(); bool update(uint32_t now); }   // update(): false when leaving
+
 // ---------------- idle: screensaver and PIN lock ----------------
 namespace saver { void begin(); bool update(uint32_t now); }     // update(): false once a button woke it
 namespace lockscr { bool enabled(); void begin(); bool update(uint32_t now); }   // update(): false once unlocked
