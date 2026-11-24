@@ -1,6 +1,6 @@
 // Games for LilyGO TTGO T-Display V1.1 (ESP32, ST7789 135x240)
 //
-// 55 two-button games and 7 pocket tools (see README.md).
+// 56 two-button games and 7 pocket tools (see README.md), WiFi in Settings.
 // On boot a menu lets you pick a game, open Settings (battery, brightness,
 // USB logging, last crash) or put the board to sleep:
 //   Tap L : next entry
@@ -215,6 +215,7 @@ static const MenuItem ITEMS[] = {
   GAME("Fish",   "fish_hi",    fish),
   GAME("Bowl",   "bowl_hi",    bowl),
   GAME("Reversi", "reversi_hi", reversi),
+  GAME("Fringe",  "fringe_hi",  fringe),
   {"Timer",    nullptr, timer::begin,    timer::update,    timer::drawIcon,    timer::menuInfo,    "open"},
   {"Torch",    nullptr, torch::begin,    torch::update,    torch::drawIcon,    torch::menuInfo,    "open"},
   {"Dice",     nullptr, dice::begin,     dice::update,     dice::drawIcon,     dice::menuInfo,     "open"},
@@ -272,6 +273,12 @@ void renderMenu(uint32_t now) {
     spr.fillRect(22, 12, 2, 3, TFT_LIGHTGREY);
     int w = max(1, 12 * pct / 100);
     spr.fillRect(8, 11, w, 5, bcol);
+  }
+
+  // WiFi badge next to the battery when connected
+  if (wifiConnected()) {
+    for (int r = 3; r <= 9; r += 3) spr.drawCircleHelper(37, 18, r, 1 | 2, TFT_CYAN);
+    spr.fillCircle(37, 17, 1, TFT_CYAN);
   }
 
   spr.setTextDatum(TC_DATUM);
@@ -430,6 +437,7 @@ void setup() {
   prefs.begin("tetris", false);
   initDiag(itemName);
   initBacklight();
+  initWifi();
   selected = prefs.getUChar("game", 0) % NUM_ITEMS;
   if (!ITEMS[selected].hiKey) selected = 0;
   scroll = scrollTarget();         // start with the remembered game in view, no animation

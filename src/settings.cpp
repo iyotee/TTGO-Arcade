@@ -1,15 +1,17 @@
 // Settings screen: battery level (read only), display brightness, USB logging,
-// reset high scores submenu and the last recorded crash.
+// auto-sleep, WiFi (wifiui.cpp), reset high scores submenu and the last recorded crash.
 //
 //   Tap L : next row (hold to auto-repeat in reset list)
 //   Tap R : change brightness / toggle USB log / open reset / back
 
 #include "common.h"
 
+namespace wifiui { void open(); bool update(uint32_t now); }
+
 namespace settings {
 
-enum Row { ROW_BRIGHTNESS, ROW_USBLOG, ROW_SLEEP, ROW_RESET, ROW_BACK, NUM_ROWS };
-enum Screen { SCR_MAIN, SCR_RESET, SCR_CONFIRM };
+enum Row { ROW_BRIGHTNESS, ROW_USBLOG, ROW_SLEEP, ROW_WIFI, ROW_RESET, ROW_BACK, NUM_ROWS };
+enum Screen { SCR_MAIN, SCR_RESET, SCR_CONFIRM, SCR_WIFI };
 
 static Screen screen = SCR_MAIN;
 static int row = ROW_BRIGHTNESS;
@@ -83,58 +85,68 @@ static void renderMain() {
 
   // brightness
   bool sel = row == ROW_BRIGHTNESS;
-  drawRowBox(72, 36, sel);
+  drawRowBox(70, 32, sel);
   spr.setTextColor(sel ? TFT_WHITE : TFT_DARKGREY);
-  spr.drawString("Brightness", 14, 74, 2);
+  spr.drawString("Brightness", 14, 71, 2);
   int lvl = brightnessLevel();
   for (int i = 0; i < NUM_BRIGHTNESS; i++) {
-    int x = 15 + i * 22, h = 4 + i * 2, y = 104 - h;
+    int x = 15 + i * 22, h = 3 + i * 2, y = 99 - h;
     if (i <= lvl) spr.fillRect(x, y, 18, h, sel ? TFT_YELLOW : TFT_DARKGREY);
     else spr.drawRect(x, y, 18, h, TFT_DARKGREY);
   }
 
   // USB log
   sel = row == ROW_USBLOG;
-  drawRowBox(112, 20, sel);
+  drawRowBox(106, 20, sel);
   spr.setTextColor(sel ? TFT_WHITE : TFT_DARKGREY);
-  spr.drawString("USB log", 14, 114, 2);
+  spr.drawString("USB log", 14, 108, 2);
   spr.setTextDatum(TR_DATUM);
   spr.setTextColor(!sel ? TFT_DARKGREY : usbLogOn() ? TFT_GREEN : TFT_LIGHTGREY);
-  spr.drawString(usbLogOn() ? "On" : "Off", 121, 114, 2);
+  spr.drawString(usbLogOn() ? "On" : "Off", 121, 108, 2);
 
   // Auto-sleep
   sel = row == ROW_SLEEP;
-  drawRowBox(136, 20, sel);
+  drawRowBox(128, 20, sel);
   spr.setTextDatum(TL_DATUM);
   spr.setTextColor(sel ? TFT_WHITE : TFT_DARKGREY);
-  spr.drawString("Auto-sleep", 14, 138, 2);
+  spr.drawString("Auto-sleep", 14, 130, 2);
   spr.setTextDatum(TR_DATUM);
   spr.setTextColor(sel ? TFT_CYAN : TFT_DARKGREY);
-  spr.drawString(sleepLabel(), 121, 138, 2);
+  spr.drawString(sleepLabel(), 121, 130, 2);
+
+  // WiFi
+  sel = row == ROW_WIFI;
+  drawRowBox(150, 20, sel);
+  spr.setTextDatum(TL_DATUM);
+  spr.setTextColor(sel ? TFT_WHITE : TFT_DARKGREY);
+  spr.drawString("WiFi", 14, 152, 2);
+  spr.setTextDatum(TR_DATUM);
+  spr.setTextColor(!sel ? TFT_DARKGREY : wifiConnected() ? TFT_GREEN : wifiEnabled() ? TFT_ORANGE : TFT_LIGHTGREY);
+  spr.drawString(wifiConnected() ? "On  >" : wifiEnabled() ? "...  >" : "Off  >", 121, 152, 2);
 
   // Reset scores
   sel = row == ROW_RESET;
-  drawRowBox(160, 20, sel);
+  drawRowBox(172, 20, sel);
   spr.setTextDatum(TL_DATUM);
   spr.setTextColor(sel ? TFT_WHITE : TFT_DARKGREY);
-  spr.drawString("Reset scores", 14, 162, 2);
+  spr.drawString("Reset scores", 14, 174, 2);
   spr.setTextDatum(TR_DATUM);
   spr.setTextColor(sel ? TFT_YELLOW : TFT_DARKGREY);
-  spr.drawString(">", 121, 162, 2);
+  spr.drawString(">", 121, 174, 2);
 
   // back
   sel = row == ROW_BACK;
-  drawRowBox(184, 20, sel);
+  drawRowBox(194, 20, sel);
   spr.setTextDatum(TC_DATUM);
   spr.setTextColor(sel ? TFT_WHITE : TFT_DARKGREY);
-  spr.drawString("Back to menu", 67, 186, 2);
+  spr.drawString("Back to menu", 67, 196, 2);
 
   // last crash, if any (small, so it doesn't crowd the screen)
   if (lastCrash(buf, sizeof buf)) {
     char line[48];
     snprintf(line, sizeof line, "! %s", buf);   // e.g. "! watchdog in Flappy"
     spr.setTextColor(TFT_ORANGE);
-    spr.drawString(line, 67, 208, 1);
+    spr.drawString(line, 67, 214, 1);
   }
 
   spr.setTextDatum(TL_DATUM);
@@ -145,7 +157,7 @@ static void renderMain() {
   spr.drawString("next", 22, 222, 2);
   const char *act = (row == ROW_BRIGHTNESS || row == ROW_SLEEP) ? "change"
                   : row == ROW_USBLOG                            ? "toggle"
-                  : row == ROW_RESET                             ? "open"
+                  : row == ROW_RESET || row == ROW_WIFI          ? "open"
                                                                  : "back";
   spr.drawString(act, 82, 222, 2);
 }
@@ -275,6 +287,15 @@ void begin() {
 }
 
 void update(uint32_t now) {
+  if (screen == SCR_WIFI) {                              // the WiFi screens run themselves
+    if (!wifiui::update(now)) {
+      screen = SCR_MAIN;
+      pressedL = pressedR = false;
+      lastInput = now;
+      render();
+    }
+    return;
+  }
   int eL = updateBtn(bL, now);
   int eR = updateBtn(bR, now);
   if (eL || eR || bL.stable || bR.stable) lastInput = now;
@@ -295,7 +316,11 @@ void update(uint32_t now) {
       if (row == ROW_USBLOG) setUsbLog(!usbLogOn());
       else if (row == ROW_BRIGHTNESS) setBrightness((brightnessLevel() + 1) % NUM_BRIGHTNESS, true);
       else if (row == ROW_SLEEP) setSleepOption((sleepOption() + 1) % NUM_SLEEP_OPTS, true);
-      else {
+      else if (row == ROW_WIFI) {
+        screen = SCR_WIFI;
+        wifiui::open();
+        return;
+      } else {
         screen = SCR_RESET;
         resetIdx = resetScroll = 0;
         pressedL = pressedR = false;

@@ -70,6 +70,7 @@ bool onUsbPower(int mv) { return mv >= 4350; }
 
 void goToSleep() {
   dbg("going to sleep\n");
+  wifiShutdown();
   if (usbLogOn()) Serial.flush();
   spr.fillSprite(TFT_BLACK);
   spr.pushSprite(0, 0);

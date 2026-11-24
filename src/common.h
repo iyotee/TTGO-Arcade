@@ -83,6 +83,27 @@ void returnToMenu();
 int numGames();
 const char *gameInfo(int idx, const char **hiKey);
 
+// ---------------- WiFi (wifi.cpp) ----------------
+enum WpsState { WPS_IDLE, WPS_RUNNING, WPS_GOT_CREDS, WPS_FAILED, WPS_TIMEOUT };
+void initWifi();                      // in setup(), after prefs.begin(): rejoins the saved network if WiFi is on
+bool wifiEnabled();
+void setWifiEnabled(bool on);         // saved; off also powers the radio down
+bool wifiConnected();
+const char *wifiSavedSsid();          // "" if none
+int wifiRssi();                       // dBm, -127 when not connected
+void wifiIp(char *buf, size_t n);
+void wifiNoteConnected();             // call once connected, to remember the network name
+const char *wifiFailReason();         // "" or a short hint after a failed attempt
+void wifiStartScan();                 // asynchronous
+int wifiScanResult();                 // -1 running, -2 failed, else number of networks
+void wifiScanFree();
+void wifiConnect(const char *ssid, const char *pass);
+void wifiStartWps();                  // push-button WPS, the router side times out after 2 min
+int wifiWpsState();
+void wifiStopWps();
+void wifiForget();
+void wifiShutdown();                  // before deep sleep
+
 // ---------------- diagnostics (diag.cpp) ----------------
 void initDiag(const char *(*itemName)(int));   // after prefs.begin(); item -1 = menu
 void dbg(const char *fmt, ...);       // printf to USB serial when USB logging is on
@@ -172,6 +193,7 @@ DECLARE_GAME(dodge)
 DECLARE_GAME(fish)
 DECLARE_GAME(bowl)
 DECLARE_GAME(reversi)
+DECLARE_GAME(fringe)
 
 DECLARE_GAME(timer)                   // tools (use the same entry points)
 namespace timer { void menuInfo(char *buf, size_t n); }

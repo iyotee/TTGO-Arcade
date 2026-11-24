@@ -1,13 +1,13 @@
 # 🎮 TTGO-Arcade
 
 > Retro arcade game collection for the **LilyGO TTGO T-Display V1.1** (ESP32).  
-> Featuring **55 playable two-button games**, **7 pocket tools**, a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
+> Featuring **56 playable two-button games** (including the original **Fringe**), **7 pocket tools**, WiFi (scan / password / WPS), a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
 
 ---
 
 ## ✨ Features
 
-- **55 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
+- **56 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
 - **7 Pocket Tools** — **Stopwatch** (with laps), **Flashlight** (White, Warm, Red, SOS, Strobe), **Dice** (dice, coin, D20, 1-100, yes/no), **Tally** two-player counter, **Countdown** timer with flashing alarm, **Morse** keyer/decoder and guided **Breathing**.
 - **Smooth Animated Menu** — 60 fps scrolling list with live animated game icons, mini battery/USB status badge, and fast scroll on `Hold L`.
 - **Persistent Saves (NVS)** — Remembers high scores, last played game, brightness, auto-sleep timer, and USB logging state across power-offs.
@@ -30,7 +30,14 @@ The board has two buttons:
 
 ---
 
-## 🎯 Games (55)
+## 🎯 Games (56)
+
+### ✨ Original
+| Game | Controls | Goal |
+|---|---|---|
+| **Fringe** | `Tap L / R` send a ring from the left / right corner · `Hold L + R` cancel rings | Where a left ring crosses a right ring, a spark climbs the screen; the time gap between your two taps is the aim (L first = spark to the right). Catch drifting motes (chains multiply, 3 on one spark = +1 life), avoid red mines; a fading mote costs a life |
+
+*Fringe — original game by Jérémy Noverraz, 2026.*
 
 ### Arcade & Action
 | Game | Controls | Goal |
@@ -127,6 +134,7 @@ The board has two buttons:
   - **Brightness**: 5 PWM levels (`R` cycles and saves to NVS).
   - **USB log**: Toggle diagnostic serial logging (`115200` baud).
   - **Auto-sleep**: Configurable idle timeout (`30s`, `60s`, `2m`, `5m`, or `Off`).
+  - **WiFi**: On/Off (saved; reconnects to the saved network at boot), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`). A WiFi badge shows in the menu while connected. WiFi drains the battery faster: switch it off when you don't need it.
   - **Reset scores**: Submenu to clear **All games** or any individual game's best score (with confirmation).
   - **Crash indicator**: Displays an orange warning at the bottom if a previous reset/watchdog crash occurred (e.g. `! crash in Flappy`).
 - **Sleep**: Puts the ESP32 into deep sleep with backlight and battery ADC disabled. Press **R** (`GPIO35`) to wake back to the menu.
@@ -159,6 +167,8 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
     ├── power.cpp         # PWM backlight, battery ADC curve, deep sleep, auto-sleep
     ├── diag.cpp          # USB logging & persistent crash diagnostics
     ├── settings.cpp      # Settings UI, Reset Scores submenu & confirmation modal
+    ├── wifi.cpp          # WiFi: reconnect, scan, connect, WPS (push button)
+    ├── wifiui.cpp        # WiFi screens: status, network list, password wheel, WPS
     ├── timer.cpp         # Stopwatch tool
     ├── torch.cpp         # Flashlight tool
     ├── dice.cpp, tally.cpp, minute.cpp, morse.cpp, breathe.cpp   # Other tools
