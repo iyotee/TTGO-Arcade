@@ -1,13 +1,13 @@
 # 🎮 TTGO-Arcade
 
 > Retro arcade game collection for the **LilyGO TTGO T-Display V1.1** (ESP32).  
-> Featuring **35 playable two-button games**, **2 pocket tools**, a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
+> Featuring **50 playable two-button games**, **2 pocket tools**, a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
 
 ---
 
 ## ✨ Features
 
-- **35 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
+- **50 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
 - **2 Pocket Tools** — Built-in **Stopwatch/Timer** (with lap tracking) and **Flashlight** (White, Warm, Red, SOS, Strobe).
 - **Smooth Animated Menu** — 60 fps scrolling list with live animated game icons, mini battery/USB status badge, and fast scroll on `Hold L`.
 - **Persistent Saves (NVS)** — Remembers high scores, last played game, brightness, auto-sleep timer, and USB logging state across power-offs.
@@ -29,7 +29,7 @@ The board has two buttons:
 
 ---
 
-## 🎯 Games (35)
+## 🎯 Games (50)
 
 ### Arcade & Action
 | Game | Controls | Goal |
@@ -46,6 +46,9 @@ The board has two buttons:
 | **Bumper** | `Hold L / R` steer · `L + R` turbo ram | Knock AI bots out of the circular sumo arena |
 | **Maze** | `Tap L / R` turn left/right · `Hold L / R` U-turn | Eat all dots & power pellets, dodge ghosts; 3 lives |
 | **Snake** | `Tap L / R` turn left/right (relative) | Eat food, avoid walls and yourself |
+| **Tron** | `Tap L / R` turn 90° left/right | Light cycles: trap the AI in your trail; each round is faster |
+| **Tank** | `Hold L / R` aim barrel · `Hold L + R` charge, release to fire | Artillery duel vs a CPU tank over hills and wind; 3 HP each |
+| **Sub** | `Hold L` dive · `Hold R` rise · `L + R` torpedo | Grab sea-floor chests, sink sharks & mines, surface for oxygen; 3 hulls |
 
 ### Endless Runners, Jumpers & Dodgers
 | Game | Controls | Goal |
@@ -60,6 +63,10 @@ The board has two buttons:
 | **Crossy** | `Tap L / R` forward · `Hold L / R` sideways · `L + R` back | Cross roads and rivers; keep moving before the eagle comes |
 | **Duet** | `Hold L / R` spin orbit CCW / CW | Thread both orbiting spheres past falling blocks |
 | **Lunar** | `Hold L / R` push left/right · `L + R` main thrust | Land softly on the flat green pad before fuel runs out |
+| **Frog** | `Tap L / R` hop forward · `Hold L / R` hop left/right | Cross traffic, ride logs, fill all 5 lily-pad homes; 3 lives |
+| **Gravity** | `Tap L / R` fall to the left/right wall | Flip between walls to dodge spikes and saws; gems +10 |
+| **Swing** | `Hold L / R` grapple (rope reels in) · release to fly | Swing from anchor to anchor; don't fall or get left behind |
+| **Chute** | `Hold L / R` steer · `L + R` open chute (below 350 m) | Skydive through rings, dodge birds, land on the pad |
 
 ### Timing, Reflex & Skill
 | Game | Controls | Goal |
@@ -70,6 +77,8 @@ The board has two buttons:
 | **Catch** | `Hold L / R` move basket | Catch coins & gems, avoid red bombs; 3 lives |
 | **Whack** | `Tap L / R` whack left/right burrow | Hit moles (+10 / +30), skip red bombs; 3 lives |
 | **Golf** | `Hold L / R` aim · `Hold & release L + R` putt | Sink holes before running out of shots (+3 shots/hole) |
+| **Plinko** | `Tap L / R` drop ball · `Hold L / R` nudge balls | 12 balls through a peg board; the 100 slot gives a free ball |
+| **Math** | `Tap L` false · `Tap R` true | Judge equations before the timer bar empties; 3 lives |
 
 ### Puzzle, Memory & Cards
 | Game | Controls | Goal |
@@ -81,6 +90,12 @@ The board has two buttons:
 | **Memory** | `Tap L` next card · `Tap R` flip card | Match all 8 pairs within limited tries |
 | **Mines** | `Tap L` cell · `Hold L` row · `Tap R` reveal · `Hold R` flag | Clear minefields without hitting a mine |
 | **21** | `Tap L` hit · `Tap R` stand / next hand | Arcade Blackjack; reach the highest chip stack |
+| **Hi-Lo** | `Tap L` lower · `Tap R` higher | Guess the next card; streaks build up to a 5x multiplier; 3 lives |
+| **Slots** | `Tap L` bet · `Tap R` spin / stop reel · `Hold L` cash out | 3-reel fruit machine from 100 credits; best = peak credits |
+| **Pop** | `Tap L` next tile · `Hold L` next row · `Tap R` pop group | Pop groups of 2+ same tiles; bigger groups score much more |
+| **Lights** | `Tap L` next cell · `Hold L` next row · `Tap R` toggle | Lights Out 5×5: switch every light off within the move limit |
+| **Code** | `Tap L` cycle color · `Hold L` previous peg · `Tap R` next peg / submit | Crack the hidden 4-peg color code from the clues |
+| **Drop 4** | `Tap L` next column · `Tap R` drop disc | Connect four vs the CPU; keep your win streak going |
 
 ---
 
@@ -138,6 +153,7 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
     └── <game>.cpp        # One self-contained namespace per game
 ```
 
+**Adding a game:** create `src/<name>.cpp` with a `namespace <name>` exposing `begin()`, `update(now)` and `drawIcon(cx, cy, dim, t)` (copy the structure of `gravity.cpp` or `stack.cpp`), then add `DECLARE_GAME(<name>)` to `common.h` and a `GAME("Name", "<name>_hi", <name>)` line to `ITEMS[]` in `main.cpp`. The high score is kept in NVS under `<name>_hi` (15 characters max).
 
 ---
 

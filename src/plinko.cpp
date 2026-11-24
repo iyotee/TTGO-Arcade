@@ -1,8 +1,8 @@
 // Plinko (Pegboard Ball Drop)
 //
 // Controls (two buttons):
-//   Tap L or R : drop ball from the sweeping launcher
-//   Hold L / R : nudge falling balls left / right
+//   Tap L or R : drop a ball from the sweeping launcher (on release)
+//   Hold L / R : nudge falling balls left / right (a hold drops nothing)
 // 12 balls per game; center 100-pt slot awards a bonus ball!
 
 #include "common.h"
@@ -11,6 +11,7 @@ namespace plinko {
 
 static const int MAX_BALLS = 6, PEG_ROWS = 7;
 static const uint32_t TICK_MS = 16;
+static const uint32_t TAP_MS = 250;     // a shorter press is a tap (drop), longer is a nudge
 
 struct Ball { float x, y, vx, vy; bool active; };
 
@@ -52,13 +53,13 @@ static void newGame() {
   dirty = true;
 }
 
-static void tick(int eL, int eR) {
+static void tick(bool tap) {
   if (coolT > 0) coolT--;
   dropX += dropVx;
   if (dropX < 18) { dropX = 18; dropVx = fabsf(dropVx); }
   if (dropX > 117) { dropX = 117; dropVx = -fabsf(dropVx); }
 
-  if ((eL == 1 || eR == 1) && ballsLeft > 0 && coolT == 0) {
+  if (tap && ballsLeft > 0 && coolT == 0) {
     for (int i = 0; i < MAX_BALLS; i++) {
       if (!balls[i].active) {
         balls[i] = {dropX, 52.0f, (rnd(3) - 1) * 0.15f, 0.2f, true};
@@ -71,8 +72,9 @@ static void tick(int eL, int eR) {
   }
 
   float nudge = 0;
-  if (bL.stable && !bR.stable) nudge = -0.025f;
-  if (bR.stable && !bL.stable) nudge = 0.025f;
+  uint32_t now = millis();
+  if (bL.stable && !bR.stable && now - bL.t0 >= TAP_MS / 2) nudge = -0.025f;
+  if (bR.stable && !bL.stable && now - bR.t0 >= TAP_MS / 2) nudge = 0.025f;
 
   const int pts[5] = {10, 30, 100, 30, 10};
   for (int i = 0; i < MAX_BALLS; i++) {
@@ -172,7 +174,7 @@ static void drawTitle() {
 
   spr.setTextDatum(TL_DATUM);
   const char *keys[] = {"Tap L/R", "Hold L/R"};
-  const char *acts[] = {"drop ball", "nudge"};
+  const char *acts[] = {"drop ball", "nudge balls"};
   for (int i = 0; i < 2; i++) {
     spr.setTextColor(TFT_YELLOW);
     spr.drawString(keys[i], 8, 96 + i * 20, 2);
@@ -219,11 +221,13 @@ void update(uint32_t now) {
 
   if (state == PLAY) {
     if (now - lastTick > 200) lastTick = now - TICK_MS;
-    bool first = true;
+    // a tap waits for the next tick, so one between two ticks still counts
+    static bool tap = false;
+    if ((eL == 2 && now - bL.t0 < TAP_MS) || (eR == 2 && now - bR.t0 < TAP_MS)) tap = true;
     while (state == PLAY && now - lastTick >= TICK_MS) {
       lastTick += TICK_MS;
-      tick(first ? eL : 0, first ? eR : 0);
-      first = false;
+      tick(tap);
+      tap = false;
       dirty = true;
     }
   } else {

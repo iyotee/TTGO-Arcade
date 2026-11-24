@@ -1,8 +1,9 @@
 // Swing (Grapple Rope)
 //
 // Controls (two buttons):
-//   Hold L or R : grapple onto nearest anchor & swing!
-// Release at the upward arc to fly forward. Don't fall off the bottom!
+//   Hold L or R : grapple the nearest anchor ahead; the rope reels in while held
+// Release on the upward arc to fly forward. The screen keeps scrolling: don't
+// fall off the bottom or get left behind.
 
 #include "common.h"
 
@@ -17,11 +18,11 @@ enum State { TITLE, PLAY, GAMEOVER };
 static State state = TITLE;
 
 static Anchor anchors[NUM_ANCHORS];
-static float px, py, vx, vy, camX;
+static float px, py, vx, vy, camX, scrollSpd;
 static int hookedIdx;
 static float ropeLen;
 static uint32_t score = 0, hiScore = 0;
-static bool newHigh = false, dirty = true, armed = false;
+static bool newHigh = false, dirty = true, armed = false, fellOff = false;
 static uint32_t lastTick = 0, lastInput = 0;
 
 static int rnd(int n) { return esp_random() % n; }
@@ -41,14 +42,15 @@ static void gameOver() {
 static void newGame() {
   score = 0;
   camX = 0;
-  px = 35;
-  py = 135;
-  vx = 2.0f;
-  vy = -1.5f;
+  px = 30;
+  py = 110;
+  vx = 2.2f;
+  vy = -1.0f;
+  scrollSpd = 0.3f;
   hookedIdx = -1;
-  newHigh = false;
+  newHigh = fellOff = false;
   for (int i = 0; i < NUM_ANCHORS; i++) {
-    anchors[i] = {55.0f + i * 52.0f, (float)(64 + rnd(26))};
+    anchors[i] = {60.0f + i * 55.0f, (float)(64 + rnd(26))};
   }
   state = PLAY;
   lastTick = millis();
@@ -60,29 +62,32 @@ static void tick() {
 
   if (wantHook) {
     if (hookedIdx < 0) {
+      // nearest anchor that is ahead of and above the player
       int best = -1;
       float bestD = 9999.0f;
       for (int i = 0; i < NUM_ANCHORS; i++) {
         float dx = anchors[i].x - px, dy = anchors[i].y - py;
-        if (dx > -15.0f) {
+        if (dx > 0 && dy < 0) {
           float d = hypotf(dx, dy);
           if (d < bestD) { bestD = d; best = i; }
         }
       }
-      if (best >= 0 && bestD < 130.0f) {
+      if (best >= 0 && bestD < 110.0f) {
         hookedIdx = best;
-        ropeLen = max(24.0f, bestD);
+        ropeLen = bestD;
       }
     }
   } else {
     hookedIdx = -1;
   }
 
-  vy += 0.14f;                                            // gravity
+  vy += 0.12f;                                            // gravity
   px += vx;
   py += vy;
 
   if (hookedIdx >= 0) {
+    // reeling in pumps energy into the swing (taut-rope jerks lose some)
+    ropeLen = max(26.0f, ropeLen - 0.45f);
     const Anchor &a = anchors[hookedIdx];
     float dx = px - a.x, dy = py - a.y;
     float d = hypotf(dx, dy);
@@ -95,32 +100,34 @@ static void tick() {
         vx -= vn * nx;
         vy -= vn * ny;
       }
-      // Slight forward pump while swinging forward
-      vx += 0.04f;
     }
   }
 
-  vx = constrain(vx, 0.8f, 3.8f);
+  float spd = hypotf(vx, vy);
+  if (spd > 4.5f) { vx *= 4.5f / spd; vy *= 4.5f / spd; }
 
+  // the view creeps forward on its own (faster over time) and follows the player
+  scrollSpd = min(1.0f, scrollSpd + 0.00014f);
+  camX += scrollSpd;
   float screenX = px - camX;
-  if (screenX > 48.0f) {
-    camX += (screenX - 48.0f);
-    score = (uint32_t)(camX / 8.0f);
-  }
+  if (screenX > 50.0f) camX += screenX - 50.0f;
+  score = (uint32_t)(camX / 8.0f);
 
-  // Recycle anchors behind camera
+  // Recycle anchors behind the camera; gaps widen with distance
   float maxX = anchors[0].x;
   for (int i = 1; i < NUM_ANCHORS; i++) if (anchors[i].x > maxX) maxX = anchors[i].x;
   for (int i = 0; i < NUM_ANCHORS; i++) {
     if (anchors[i].x - camX < -20.0f) {
       if (hookedIdx == i) hookedIdx = -1;
-      anchors[i] = {maxX + 44.0f + rnd(20), (float)(62 + rnd(30))};
+      float gap = 46.0f + min(20.0f, score * 0.03f) + rnd(20);
+      anchors[i] = {maxX + gap, (float)(58 + rnd(34))};
       maxX = anchors[i].x;
     }
   }
 
-  if (py < HEADER_H + 4) { py = HEADER_H + 4; vy = 0.5f; }
-  if (py > 244) gameOver();
+  if (py < HEADER_H + 4) { py = HEADER_H + 4; if (vy < 0) vy = 0; }
+  if (py > 244) { fellOff = true; gameOver(); }
+  else if (px - camX < -6.0f) gameOver();
 }
 
 static void drawGame() {
@@ -140,7 +147,7 @@ static void drawGame() {
   spr.drawCircle(sx, sy, 5, TFT_YELLOW);
 
   drawScoreHeader(score, hiScore);
-  if (state == GAMEOVER) drawGameOverBox("FELL!", score, hiScore, newHigh);
+  if (state == GAMEOVER) drawGameOverBox(fellOff ? "FELL!" : "LEFT BEHIND", score, hiScore, newHigh);
 }
 
 static void drawTitle() {
@@ -156,13 +163,16 @@ static void drawTitle() {
 
   spr.setTextDatum(TL_DATUM);
   spr.setTextColor(TFT_YELLOW);
-  spr.drawString("Hold L/R", 8, 102, 2);
+  spr.drawString("Hold L/R", 8, 96, 2);
+  spr.drawString("Release", 8, 116, 2);
   spr.setTextColor(TFT_WHITE);
-  spr.drawString("grapple & swing", 68, 102, 2);
+  spr.drawString("grapple", 68, 96, 2);
+  spr.drawString("fly", 68, 116, 2);
 
   spr.setTextDatum(TC_DATUM);
   spr.setTextColor(TFT_LIGHTGREY);
-  spr.drawString("Release to fly forward!", 67, 138, 1);
+  spr.drawString("Rope reels in on hold", 67, 142, 1);
+  spr.drawString("Let go on the upswing!", 67, 154, 1);
 
   snprintf(buf, sizeof buf, "Best %lu", (unsigned long)hiScore);
   spr.drawString(buf, 67, 190, 2);

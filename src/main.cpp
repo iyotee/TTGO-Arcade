@@ -1,7 +1,6 @@
 // Games for LilyGO TTGO T-Display V1.1 (ESP32, ST7789 135x240)
 //
-// Games: Tetris, Snake, Race, Flappy Bird, Tennis, Bricks (Breakout), Stack,
-// Shooter, Crossy (Crossy Road).
+// 50 two-button games (see README.md), plus Timer and Torch tools.
 // On boot a menu lets you pick a game, open Settings (battery, brightness,
 // USB logging, last crash) or put the board to sleep:
 //   Tap L : next entry
@@ -183,6 +182,21 @@ static const MenuItem ITEMS[] = {
   GAME("Whack",    "whack_hi",    whack),
   GAME("Duet",     "duet_hi",     duet),
   GAME("21",       "bj21_hi",     blackjack),
+  GAME("Tron",   "tron_hi",    tron),
+  GAME("Frog",   "frog_hi",    frog),
+  GAME("Pop",    "pop_hi",     pop),
+  GAME("Lights", "lights_hi",  lights),
+  GAME("Hi-Lo",  "hilow_hi",   hilow),
+  GAME("Math",   "math_hi",    mathblitz),
+  GAME("Code",   "code_hi",    codebreak),
+  GAME("Drop 4", "drop4_hi",   drop4),
+  GAME("Chute",  "chute_hi",   chute),
+  GAME("Plinko", "plinko_hi",  plinko),
+  GAME("Swing",  "swing_hi",   swing),
+  GAME("Tank",   "tank_hi",    tank),
+  GAME("Gravity", "gravity_hi", gravity),
+  GAME("Slots",  "slots_hi",   slots),
+  GAME("Sub",    "sub_hi",     subgame),
   {"Timer",    nullptr, timer::begin,    timer::update,    timer::drawIcon,    timer::menuInfo,    "open"},
   {"Torch",    nullptr, torch::begin,    torch::update,    torch::drawIcon,    torch::menuInfo,    "open"},
   {"Settings", nullptr, settings::begin, settings::update, settings::drawIcon, settings::menuInfo, "open"},

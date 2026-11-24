@@ -3,7 +3,8 @@
 // Controls (two buttons):
 //   Hold L / R : adjust barrel angle
 //   Hold L + R : charge power, release to fire!
-// Account for wind and hills to destroy the red enemy tank! 3 HP.
+// Account for wind and hills to destroy the red enemy tank! Both tanks have
+// 3 HP; destroying the enemy starts a new round (+1 HP back, smarter enemy).
 
 #include "common.h"
 
@@ -18,7 +19,8 @@ static State state = TITLE;
 static int16_t hill[COLS];
 static int pCol, eCol, pHp, eHp, roundNum;
 static float pAng, power, powerDir, wind;
-static bool charging, firing, pTurn;
+static bool charging, firing, pTurn, aimLock, shotByPlayer;
+static int waitT, shotAge;                 // pause between turns; ticks since launch
 static float sx, sy, svx, svy;
 static int expT, expX, expY;
 static uint32_t score = 0, hiScore = 0;
@@ -32,15 +34,15 @@ static void genTerrain() {
   eCol = 21 + rnd(4);
   int h = 190;
   for (int i = 0; i < COLS; i++) {
-    if (abs(i - pCol) <= 1) hill[i] = hill[max(0, i - 1)];
-    else if (abs(i - eCol) <= 1) hill[i] = hill[max(0, i - 1)];
-    else h = constrain(h + rnd(25) - 12, 130, 222);
+    // flat ground under (and next to) each tank
+    if (abs(i - pCol) > 1 && abs(i - eCol) > 1) h = constrain(h + rnd(25) - 12, 130, 222);
     hill[i] = h;
   }
   hill[pCol - 1] = hill[pCol + 1] = hill[pCol];
   hill[eCol - 1] = hill[eCol + 1] = hill[eCol];
   wind = (rnd(11) - 5) * 0.004f;
   eHp = 3;
+  waitT = 30;
 }
 
 static void gameOver() {
@@ -60,7 +62,7 @@ static void newGame() {
   roundNum = 1;
   pHp = 3;
   pAng = 45.0f * DEG_TO_RAD;
-  charging = firing = false;
+  charging = firing = aimLock = false;
   pTurn = true;
   expT = 0;
   newHigh = false;
@@ -77,40 +79,78 @@ static void launchShot(float x, float y, float ang, float pwr, int dir) {
   svx = dir * cosf(ang) * spd;
   svy = -sinf(ang) * spd;
   firing = true;
+  shotByPlayer = dir > 0;
+  shotAge = 0;
+}
+
+// Where a shot would come down (x), using the same physics as the real one.
+static float landingX(float x, float y, float ang, float pwr, int dir) {
+  float spd = 1.6f + pwr * 3.8f;
+  float vx = dir * cosf(ang) * spd, vy = -sinf(ang) * spd;
+  y -= 6;
+  for (int i = 0; i < 600; i++) {
+    vx += wind;
+    vy += 0.09f;
+    x += vx;
+    y += vy;
+    if (x < 0 || x > 134) return x;
+    if (y >= hill[constrain((int)(x / 5), 0, COLS - 1)]) return x;
+  }
+  return x;
+}
+
+static void enemyFire() {
+  float ex = eCol * 5 + 2, ey = hill[eCol], target = pCol * 5 + 2;
+  float ang = (38 + rnd(26)) * DEG_TO_RAD;
+  // best power for this angle, then miss by an error that shrinks each round
+  float bestP = 0.55f, bestErr = 1e9f;
+  for (int i = 0; i <= 40; i++) {
+    float p = 0.15f + i * 0.85f / 40;
+    float e = fabsf(landingX(ex, ey, ang, p, -1) - target);
+    if (e < bestErr) { bestErr = e; bestP = p; }
+  }
+  float err = max(0.03f, 0.16f - roundNum * 0.02f);
+  float pwr = constrain(bestP + ((rnd(201) - 100) / 100.0f) * err, 0.15f, 1.0f);
+  launchShot(ex, ey, ang, pwr, -1);
+}
+
+static void endTurn() {
+  pTurn = !pTurn;
+  waitT = 45;
 }
 
 static void tick() {
   if (expT > 0) expT--;
 
   if (!firing) {
-    if (!pTurn) {
-      // Enemy fires back
-      float ex = eCol * 5 + 2, ey = hill[eCol];
-      float err = max(0.08f, 0.35f - roundNum * 0.04f);
-      float ang = (38 + rnd(26)) * DEG_TO_RAD;
-      float pwr = constrain(0.55f + ((rnd(100) - 50) / 100.0f) * err, 0.25f, 0.95f);
-      launchShot(ex, ey, ang, pwr, -1);
+    if (waitT > 0) { waitT--; charging = false; return; }
+    if (!pTurn) { enemyFire(); return; }
+
+    // after a shot, wait until both buttons are up before aiming again
+    if (aimLock) {
+      if (!bL.stable && !bR.stable) aimLock = false;
       return;
     }
-
     if (bL.stable && bR.stable) {
       if (!charging) { charging = true; power = 0.15f; powerDir = 1.0f; }
       else {
-        power += powerDir * 0.025f;
+        power += powerDir * 0.02f;
         if (power >= 1.0f) { power = 1.0f; powerDir = -1.0f; }
         if (power <= 0.15f) { power = 0.15f; powerDir = 1.0f; }
       }
     } else if (charging) {
       charging = false;
+      aimLock = true;
       launchShot(pCol * 5 + 2, hill[pCol], pAng, power, 1);
     } else {
-      if (bL.stable) pAng = min(82.0f * (float)DEG_TO_RAD, pAng + 0.025f);
-      if (bR.stable) pAng = max(12.0f * (float)DEG_TO_RAD, pAng - 0.025f);
+      if (bL.stable) pAng = min(82.0f * (float)DEG_TO_RAD, pAng + 0.02f);
+      if (bR.stable) pAng = max(12.0f * (float)DEG_TO_RAD, pAng - 0.02f);
     }
     return;
   }
 
   // Projectile flight
+  shotAge++;
   svx += wind;
   svy += 0.09f;
   sx += svx;
@@ -118,16 +158,18 @@ static void tick() {
 
   if (sx < 0 || sx > 134 || sy > 240) {
     firing = false;
-    pTurn = !pTurn;
+    endTurn();
     return;
   }
 
   int col = constrain((int)(sx / 5), 0, COLS - 1);
   float px = pCol * 5 + 2, py = hill[pCol] - 3;
   float ex = eCol * 5 + 2, ey = hill[eCol] - 3;
-  bool hitGround = (sy >= hill[col]);
-  bool hitP = hypotf(sx - px, sy - py) < 8;
-  bool hitE = hypotf(sx - ex, sy - ey) < 8;
+  // a fresh shell can't hit the tank that fired it
+  bool armedShell = shotAge > 12;
+  bool hitGround = sy >= hill[col];
+  bool hitP = (armedShell || !shotByPlayer) && hypotf(sx - px, sy - py) < 8;
+  bool hitE = (armedShell || shotByPlayer) && hypotf(sx - ex, sy - ey) < 8;
 
   if (hitGround || hitP || hitE) {
     firing = false;
@@ -135,9 +177,9 @@ static void tick() {
     expY = (int)sy;
     expT = 12;
 
-    if (hypotf(sx - ex, sy - ey) < 12) {
+    if ((armedShell || shotByPlayer) && hypotf(sx - ex, sy - ey) < 12) {
       eHp--;
-      score += 50;
+      if (shotByPlayer) score += 50;
       if (eHp <= 0) {
         score += 150;
         roundNum++;
@@ -147,12 +189,16 @@ static void tick() {
         return;
       }
     }
-    if (hypotf(sx - px, sy - py) < 12) {
+    if ((armedShell || !shotByPlayer) && hypotf(sx - px, sy - py) < 12) {
       if (--pHp <= 0) { gameOver(); return; }
     }
     // Crater
-    if (hitGround) hill[col] = min(232, hill[col] + 5);
-    pTurn = !pTurn;
+    if (hitGround) {
+      hill[col] = min(232, hill[col] + 5);
+      if (col > 0) hill[col - 1] = min(232, hill[col - 1] + 2);
+      if (col < COLS - 1) hill[col + 1] = min(232, hill[col + 1] + 2);
+    }
+    endTurn();
   }
 }
 
@@ -160,7 +206,7 @@ static void drawGame() {
   char buf[20];
   spr.fillSprite(0x0842);
 
-  for (int i = 0; i < COLS - 1; i++) {
+  for (int i = 0; i < COLS; i++) {
     spr.fillRect(i * 5, hill[i], 5, 240 - hill[i], 0x3C82);
   }
 
@@ -183,12 +229,19 @@ static void drawGame() {
   }
 
   drawScoreHeader(score, hiScore);
-  for (int i = 0; i < pHp; i++) spr.fillRect(96 + i * 11, 7, 8, 4, TFT_CYAN);
+  // HP: yours (cyan) above the enemy's (red)
+  for (int i = 0; i < pHp; i++) spr.fillRect(99 + i * 11, 4, 8, 4, TFT_CYAN);
+  for (int i = 0; i < eHp; i++) spr.fillRect(99 + i * 11, 11, 8, 4, TFT_RED);
+  if (state == PLAY && !firing && waitT == 0 && pTurn) {
+    spr.setTextDatum(TC_DATUM);
+    spr.setTextColor(TFT_YELLOW);
+    spr.drawString("YOUR TURN", 67, 44, 1);
+  }
   spr.setTextDatum(TR_DATUM);
   spr.setTextColor(TFT_LIGHTGREY);
   int w = (int)roundf(wind * 1000);
   snprintf(buf, sizeof buf, "W:%s%d", w > 0 ? ">" : w < 0 ? "<" : "", abs(w));
-  spr.drawString(buf, 132, 20, 1);
+  spr.drawString(buf, 132, 24, 1);
 
   if (state == GAMEOVER) drawGameOverBox("DESTROYED!", score, hiScore, newHigh);
 }

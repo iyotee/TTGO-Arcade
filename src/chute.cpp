@@ -2,7 +2,7 @@
 //
 // Controls (two buttons):
 //   Hold L / R : steer left / right
-//   L + R      : open parachute (below 300 m)
+//   L + R      : open parachute (below 350 m)
 // Collect gold rings, dodge birds, then pop your chute and land on the pad!
 
 #include "common.h"
@@ -11,9 +11,10 @@ namespace chute {
 
 static const int MAX_OBJ = 8;
 static const int DIVER_Y = 82;
+static const float CHUTE_ALT = 350.0f;  // the chute can only open below this
 static const uint32_t TICK_MS = 16;
 
-struct Obj { float x, y; bool ring, active; };
+struct Obj { float x, y, vx; bool ring, active; };
 
 enum State { TITLE, PLAY, GAMEOVER };
 static State state = TITLE;
@@ -22,6 +23,7 @@ static float dx, alt, fallSpd, padX;
 static bool chuteOpen;
 static int level, spawnT;
 static Obj objs[MAX_OBJ];
+static const char *endMsg = "";
 static uint32_t score = 0, hiScore = 0;
 static bool newHigh = false, dirty = true, armed = false;
 static uint32_t lastTick = 0, lastInput = 0;
@@ -66,7 +68,7 @@ static void tick() {
   if (bR.stable && !bL.stable) dx += steerSpd;
   dx = constrain(dx, 8.0f, 127.0f);
 
-  if (!chuteOpen && bL.stable && bR.stable && alt < 350.0f) {
+  if (!chuteOpen && bL.stable && bR.stable && alt < CHUTE_ALT) {
     chuteOpen = true;
     fallSpd = 0.85f;
   }
@@ -77,7 +79,10 @@ static void tick() {
     spawnT = 22 + rnd(16);
     for (int i = 0; i < MAX_OBJ; i++) {
       if (objs[i].active) continue;
-      objs[i] = {(float)(12 + rnd(111)), 246.0f, rnd(100) < 48, true};
+      bool ring = rnd(100) < 48;
+      // birds fly sideways, faster on later jumps
+      float vx = ring ? 0 : (rnd(2) ? 1 : -1) * (0.3f + rnd(5) * 0.1f + min(0.6f, level * 0.1f));
+      objs[i] = {(float)(12 + rnd(111)), 246.0f, vx, ring, true};
       break;
     }
   }
@@ -85,12 +90,15 @@ static void tick() {
   for (int i = 0; i < MAX_OBJ; i++) {
     if (!objs[i].active) continue;
     objs[i].y -= fallSpd * 1.15f;
+    objs[i].x += objs[i].vx;
+    if (objs[i].x < 6 || objs[i].x > 129) objs[i].vx = -objs[i].vx;
     if (objs[i].y < HEADER_H - 10) { objs[i].active = false; continue; }
     if (fabsf(objs[i].x - dx) < 9 && fabsf(objs[i].y - DIVER_Y) < 9) {
       if (objs[i].ring) {
         objs[i].active = false;
         score += 30;
       } else {
+        endMsg = "BIRD STRIKE!";
         gameOver();
         return;
       }
@@ -98,12 +106,13 @@ static void tick() {
   }
 
   if (alt <= 0) {
-    if (!chuteOpen) { gameOver(); return; }
+    if (!chuteOpen) { endMsg = "SPLAT!"; gameOver(); return; }
     if (fabsf(dx - padX) <= 18.0f) {
       score += 100 * level;
       level++;
       startJump();
     } else {
+      endMsg = "MISSED PAD!";
       gameOver();
     }
   }
@@ -120,7 +129,10 @@ static void drawGame() {
       spr.drawCircle(x, y, 5, TFT_YELLOW);
       spr.drawCircle(x, y, 4, TFT_ORANGE);
     } else {
-      spr.fillTriangle(x - 6, y, x + 6, y - 3, x + 6, y + 3, TFT_RED);
+      int d = objs[i].vx < 0 ? 1 : -1;               // beak points where it flies
+      spr.fillTriangle(x - 6 * d, y, x + 6 * d, y - 3, x + 6 * d, y + 3, TFT_RED);
+      int flap = (millis() / 120) & 1 ? -4 : 4;
+      spr.drawLine(x, y, x + 2 * d, y + flap, TFT_MAROON);
     }
   }
 
@@ -142,7 +154,7 @@ static void drawGame() {
   spr.fillCircle(x, DIVER_Y - 2, 3, TFT_YELLOW);
   spr.fillRect(x - 3, DIVER_Y + 1, 7, 7, TFT_ORANGE);
 
-  if (!chuteOpen && alt < 300.0f && state == PLAY) {
+  if (!chuteOpen && alt < CHUTE_ALT && state == PLAY) {
     spr.setTextDatum(TC_DATUM);
     spr.setTextColor((millis() / 150) & 1 ? TFT_RED : TFT_YELLOW);
     spr.drawString("L+R CHUTE!", 67, 140, 2);
@@ -154,7 +166,7 @@ static void drawGame() {
   snprintf(buf, sizeof buf, "%dm", max(0, (int)alt));
   spr.drawString(buf, 132, 6, 2);
 
-  if (state == GAMEOVER) drawGameOverBox(chuteOpen ? "MISSED PAD!" : "TOO FAST!", score, hiScore, newHigh);
+  if (state == GAMEOVER) drawGameOverBox(endMsg, score, hiScore, newHigh);
 }
 
 static void drawTitle() {
@@ -181,7 +193,8 @@ static void drawTitle() {
   }
   spr.setTextDatum(TC_DATUM);
   spr.setTextColor(TFT_LIGHTGREY);
-  spr.drawString("Land on yellow pad!", 67, 148, 1);
+  spr.drawString("Open below 350 m, then", 67, 142, 1);
+  spr.drawString("land on the yellow pad", 67, 154, 1);
 
   snprintf(buf, sizeof buf, "Best %lu", (unsigned long)hiScore);
   spr.drawString(buf, 67, 190, 2);
