@@ -9,10 +9,13 @@
 // go to sleep and wake it) to return to the menu.
 //
 // High scores and settings are stored in NVS (survive power-off).
-// On menu / title / game-over screens the board goes into deep sleep after
-// 60 s of inactivity; press the GPIO35 button to wake it.
+// On menu / title / game-over screens, after the screensaver delay of
+// inactivity (Settings) Tigo's screensaver starts, and after the sleep delay
+// the board goes into deep sleep; press the GPIO35 button to wake it. With the
+// PIN lock on, the code is asked at boot and when leaving the screensaver.
 
 #include "common.h"
+#include "lockscr.h"
 
 TFT_eSPI tft;
 TFT_eSprite spr(&tft);
@@ -446,6 +449,9 @@ void setup() {
   if (!ITEMS[selected].hiKey) selected = 0;
   scroll = scrollTarget();         // start with the remembered game in view, no animation
 
+  // PIN lock before the menu works (boot and wake from deep sleep); the
+  // wake-up press is still held and doesn't count (stable already set above)
+  if (lockscr::enabled()) lockscr::run();
   menuLastInput = selectedAt = millis();
 }
 

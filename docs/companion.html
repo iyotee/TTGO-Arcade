@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3A1F3D">
+<title>Tigo companion - TTGO-Arcade</title>
+<!--
+  TTGO-Arcade companion page: talk to the board over Web Bluetooth.
+  Works in Chrome / Edge on Android and desktop, over HTTPS (GitHub Pages:
+  https://iyotee.github.io/TTGO-Arcade/companion.html) or http://localhost.
+  Not on iPhone / iPad (no Web Bluetooth in iOS browsers) nor Firefox.
+
+  Companion GATT service (firmware: src/ble.cpp)
+    7160c0de-5e11-4c0d-8a7c-7160a2cade00  service
+    ...cade01  message  write  UTF-8 text, <= 60 chars, shown in Tigo's speech bubble
+    ...cade02  treat    write  1 byte: number of treats (1..255)
+    ...cade03  wifi     write  "ssid\npassword" (encrypted link: the phone pairs first)
+    ...cade04  time     write  uint32 little-endian Unix time (UTC seconds)
+    ...cade05  status   read + notify  JSON {"bat","mv","usb","wifi","ssid","ip","on","ble"}
+-->
+<style>
+  :root {
+    --coral: #FF6B4A; --claw: #E04A2E; --peach: #FFB38A; --sand: #F2D7A6;
+    --teal: #2BB3A8; --plum: #3A1F3D; --sea: #12333f; --ink: #2a1530;
+    --card: #fff8ec; --muted: #8a6f7d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(180deg, #1d4f5e 0%, #2b7f86 34%, #f6e3bd 34.2%, var(--sand) 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  main { max-width: 520px; margin: 0 auto; padding: 12px 14px 40px; }
+
+  /* ---------------- header ---------------- */
+  header { text-align: center; color: #fff; padding-top: 6px; }
+  header h1 { margin: 2px 0 0; font-size: 1.7rem; letter-spacing: .5px; text-shadow: 0 2px 0 var(--plum); }
+  header p { margin: 2px 0 6px; opacity: .9; font-size: .95rem; }
+  .stage { position: relative; height: 170px; }
+  #tigo { width: 210px; height: 170px; display: block; margin: 0 auto; overflow: visible; }
+  #tigo .clawTop { transform-box: fill-box; transform-origin: 100% 100%; }
+  #tigo .clawL .clawTop { animation: snapL 2.6s infinite; }
+  #tigo .clawR .clawTop { animation: snapL 2.6s .3s infinite; }
+  #tigo #pupils { transition: transform .5s ease; }
+  #tigo .lids { transform-box: fill-box; transform-origin: 50% 0; transform: scaleY(0); animation: blink 4.5s infinite; }
+  #tigo.happy { animation: hop .5s ease 2; }
+  #tigo.happy .clawTop { animation-duration: .25s; }
+  @keyframes snapL { 0%, 82%, 100% { transform: rotate(0); } 88% { transform: rotate(16deg); } 94% { transform: rotate(0); } }
+  @keyframes blink { 0%, 92%, 100% { transform: scaleY(0); } 95% { transform: scaleY(1); } }
+  @keyframes hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-18px) rotate(-3deg); } }
+  .bubble {
+    position: absolute; left: 50%; top: 0; transform: translate(-50%, -8px) scale(.6);
+    background: #fff; color: var(--plum); border: 2px solid var(--plum); border-radius: 14px;
+    padding: 6px 12px; font-weight: 700; font-size: .95rem; white-space: nowrap; max-width: 92%;
+    overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: .25s; pointer-events: none;
+  }
+  .bubble.show { opacity: 1; transform: translate(-50%, -18px) scale(1); }
+  .bubble::after {
+    content: ""; position: absolute; left: 50%; bottom: -9px; width: 14px; height: 14px; background: #fff;
+    border-right: 2px solid var(--plum); border-bottom: 2px solid var(--plum); transform: translateX(-50%) rotate(45deg);
+  }
+  .treat { position: absolute; width: 16px; height: 16px; border-radius: 50% 50% 50% 0; background: var(--coral);
+    border: 2px solid var(--plum); pointer-events: none; animation: fly 1s ease-in forwards; }
+  .treat.alt { background: var(--teal); border-radius: 50%; }
+  @keyframes fly {
+    0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+    100% { transform: translate(var(--dx), var(--dy)) rotate(540deg) scale(.4); opacity: 0; }
+  }
+
+  /* ---------------- cards ---------------- */
+  .card {
+    background: var(--card); border: 2px solid var(--plum); border-radius: 18px;
+    box-shadow: 0 4px 0 var(--plum); padding: 14px; margin: 14px 0;
+  }
+  .card h2 { margin: 0 0 10px; font-size: 1.1rem; color: var(--plum); display: flex; align-items: center; gap: 8px; }
+  .card h2 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--teal); border: 2px solid var(--plum); }
+  .note { font-size: .85rem; color: var(--muted); margin: 8px 0 0; line-height: 1.35; }
+  .warn { background: #ffe3da; border-color: var(--claw); }
+  .warn h2 { color: var(--claw); }
+  .hidden { display: none !important; }
+
+  button, .btn {
+    font: inherit; font-weight: 700; border: 2px solid var(--plum); border-radius: 14px; cursor: pointer;
+    padding: 11px 16px; background: var(--coral); color: #fff; box-shadow: 0 3px 0 var(--plum);
+    transition: transform .08s, box-shadow .08s, filter .15s; touch-action: manipulation;
+  }
+  button:active { transform: translateY(3px); box-shadow: 0 0 0 var(--plum); }
+  button:disabled { filter: grayscale(.8) opacity(.55); cursor: default; }
+  button.teal { background: var(--teal); }
+  button.sand { background: var(--sand); color: var(--plum); }
+  button.ghost { background: #fff; color: var(--plum); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > input { flex: 1; min-width: 0; }
+  .wide { width: 100%; }
+  input {
+    font: inherit; padding: 11px 12px; border: 2px solid var(--plum); border-radius: 12px; background: #fff;
+    color: var(--ink); outline: none;
+  }
+  input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px #2bb3a855; }
+  label { display: block; font-size: .85rem; font-weight: 700; color: var(--plum); margin: 8px 0 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chips button { padding: 5px 10px; font-size: .82rem; border-radius: 999px; box-shadow: 0 2px 0 var(--plum); background: #fff; color: var(--plum); }
+  .counter { font-size: .78rem; color: var(--muted); text-align: right; margin-top: 3px; }
+
+  /* ---------------- status ---------------- */
+  #connCard .state { font-weight: 700; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { background: #fff; border: 2px solid var(--plum); border-radius: 14px; padding: 10px; min-height: 74px; }
+  .tile .k { font-size: .75rem; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 700; }
+  .tile .v { font-size: 1.15rem; font-weight: 800; color: var(--plum); margin-top: 2px; word-break: break-all; }
+  .tile .s { font-size: .8rem; color: var(--muted); }
+  .battery { position: relative; width: 64px; height: 26px; border: 3px solid var(--plum); border-radius: 6px; margin-top: 6px; }
+  .battery::after { content: ""; position: absolute; right: -8px; top: 6px; width: 5px; height: 9px; background: var(--plum); border-radius: 0 3px 3px 0; }
+  .battery i { position: absolute; left: 2px; top: 2px; bottom: 2px; width: 0; background: var(--teal); border-radius: 2px; transition: width .4s; }
+  .battery.low i { background: var(--claw); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .8rem; font-weight: 800; border: 2px solid var(--plum); }
+  .pill.on { background: var(--teal); color: #fff; }
+  .pill.off { background: #eee; color: var(--muted); }
+  #log { font: .78rem ui-monospace, Consolas, monospace; color: var(--muted); max-height: 7.5em; overflow: auto; margin: 8px 0 0; white-space: pre-wrap; }
+  footer { text-align: center; font-size: .8rem; color: var(--muted); margin-top: 18px; }
+  footer a { color: var(--plum); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="stage">
+      <div id="bubble" class="bubble">Pinch L, pinch R!</div>
+      <!-- Tigo the hermit crab (same palette as the firmware) -->
+      <svg id="tigo" viewBox="0 0 210 170" role="img" aria-label="Tigo the hermit crab">
+        <ellipse cx="105" cy="158" rx="70" ry="8" fill="#3A1F3D" opacity=".18"/>
+        <!-- shell -->
+        <g stroke="#3A1F3D" stroke-width="2.5" stroke-linejoin="round">
+          <path d="M138 22 L160 6 L152 34 Z" fill="#F2D7A6"/>
+          <circle cx="112" cy="70" r="50" fill="#F2D7A6"/>
+        </g>
+        <path d="M112 70 m-4 0 a4 4 0 1 1 8 0 a11 11 0 1 1 -22 0 a19 19 0 1 1 38 0 a29 29 0 1 1 -58 0 a37 37 0 0 1 4 -16"
+              fill="none" stroke="#2BB3A8" stroke-width="8" stroke-linecap="round"/>
+        <path d="M112 70 m-4 0 a4 4 0 1 1 8 0 a11 11 0 1 1 -22 0 a19 19 0 1 1 38 0 a29 29 0 1 1 -58 0 a37 37 0 0 1 4 -16"
+              fill="none" stroke="#3A1F3D" stroke-width="1.2" opacity=".35"/>
+        <ellipse cx="88" cy="40" rx="13" ry="7" fill="#fff" opacity=".85" transform="rotate(-30 88 40)"/>
+        <!-- legs -->
+        <g stroke-linecap="round" fill="none">
+          <path d="M80 128 L68 148 M94 133 L89 152 M116 133 L121 152 M130 128 L142 148" stroke="#3A1F3D" stroke-width="8"/>
+          <path d="M80 128 L68 148 M94 133 L89 152 M116 133 L121 152 M130 128 L142 148" stroke="#FF6B4A" stroke-width="4.5"/>
+        </g>
+        <!-- arms -->
+        <g stroke-linecap="round" fill="none">
+          <path d="M72 112 Q58 112 46 102 M138 112 Q152 112 164 102" stroke="#3A1F3D" stroke-width="11"/>
+          <path d="M72 112 Q58 112 46 102 M138 112 Q152 112 164 102" stroke="#FF6B4A" stroke-width="7"/>
+        </g>
+        <!-- body + face -->
+        <ellipse cx="105" cy="112" rx="40" ry="25" fill="#FF6B4A" stroke="#3A1F3D" stroke-width="2.5"/>
+        <ellipse cx="105" cy="118" rx="25" ry="13" fill="#FFB38A"/>
+        <path d="M97 117 Q105 125 113 117" fill="none" stroke="#3A1F3D" stroke-width="2.5" stroke-linecap="round"/>
+        <ellipse cx="88" cy="119" rx="5" ry="3" fill="#FF6B4A" opacity=".55"/>
+        <ellipse cx="122" cy="119" rx="5" ry="3" fill="#FF6B4A" opacity=".55"/>
+        <!-- eye stalks + eyes -->
+        <g stroke-linecap="round">
+          <path d="M95 92 L86 62 M115 92 L124 62" stroke="#3A1F3D" stroke-width="7"/>
+          <path d="M95 92 L86 62 M115 92 L124 62" stroke="#FF6B4A" stroke-width="3.5"/>
+        </g>
+        <g id="eyes" stroke="#3A1F3D" stroke-width="2.5">
+          <circle cx="84" cy="52" r="13" fill="#fff"/>
+          <circle cx="126" cy="52" r="13" fill="#fff"/>
+        </g>
+        <g id="pupils">
+          <circle cx="87" cy="54" r="6" fill="#111"/>
+          <circle cx="129" cy="54" r="6" fill="#111"/>
+          <circle cx="89.5" cy="51" r="2.2" fill="#fff"/>
+          <circle cx="131.5" cy="51" r="2.2" fill="#fff"/>
+        </g>
+        <g class="lids" fill="#FF6B4A" stroke="#3A1F3D" stroke-width="2.5">
+          <circle cx="84" cy="52" r="13"/>
+          <circle cx="126" cy="52" r="13"/>
+        </g>
+        <!-- claws: L and R, like the two buttons -->
+        <g class="clawL" transform="translate(40 98) rotate(-8)">
+          <g stroke="#3A1F3D" stroke-width="2.5" stroke-linejoin="round">
+            <path d="M6 10 Q-8 26 -26 18 Q-14 14 -6 6 Z" fill="#E04A2E"/>
+            <ellipse cx="6" cy="4" rx="14" ry="12" fill="#E04A2E"/>
+            <path class="clawTop" d="M2 -4 Q-8 -28 -30 -20 Q-20 -10 -8 -2 Z" fill="#E04A2E"/>
+          </g>
+          <circle cx="-25" cy="-19" r="4" fill="#FF9C82"/>
+          <circle cx="-22" cy="17" r="3.2" fill="#FF9C82"/>
+          <ellipse cx="9" cy="0" rx="5" ry="3" fill="#fff" opacity=".35"/>
+        </g>
+        <g transform="translate(210 0) scale(-1 1)">
+          <g class="clawR" transform="translate(40 98) rotate(-8)">
+            <g stroke="#3A1F3D" stroke-width="2.5" stroke-linejoin="round">
+              <path d="M6 10 Q-8 26 -26 18 Q-14 14 -6 6 Z" fill="#E04A2E"/>
+              <ellipse cx="6" cy="4" rx="14" ry="12" fill="#E04A2E"/>
+              <path class="clawTop" d="M2 -4 Q-8 -28 -30 -20 Q-20 -10 -8 -2 Z" fill="#E04A2E"/>
+            </g>
+            <circle cx="-25" cy="-19" r="4" fill="#FF9C82"/>
+            <circle cx="-22" cy="17" r="3.2" fill="#FF9C82"/>
+            <ellipse cx="9" cy="0" rx="5" ry="3" fill="#fff" opacity=".35"/>
+          </g>
+        </g>
+        <text x="10" y="80" font-size="15" font-weight="800" fill="#fff" stroke="#3A1F3D" stroke-width=".8">L</text>
+        <text x="190" y="80" font-size="15" font-weight="800" fill="#fff" stroke="#3A1F3D" stroke-width=".8">R</text>
+      </svg>
+    </div>
+    <h1>Tigo companion</h1>
+    <p>TTGO-Arcade over Bluetooth</p>
+  </header>
+
+  <!-- shown when this browser can't do Web Bluetooth -->
+  <section id="unsupported" class="card warn hidden">
+    <h2>Bluetooth isn't available here</h2>
+    <p id="unsupportedText" style="margin:0"></p>
+    <p class="note">This page uses <b>Web Bluetooth</b>: Chrome or Edge on Android, Windows, macOS, Linux or ChromeOS.
+      iPhone and iPad browsers (Safari, and Chrome on iOS) and Firefox don't support it.
+      The page must be opened over <b>HTTPS</b> (e.g. GitHub Pages) or from localhost.
+      On iPhone you can still use the board's <b>Remote</b> app: Settings &gt; Bluetooth &gt; TTGO-Arcade.</p>
+  </section>
+
+  <section id="connCard" class="card">
+    <h2><span class="dot" id="connDot"></span> Board</h2>
+    <div class="row">
+      <span class="state" id="connState" style="flex:1">Not connected</span>
+      <button id="connectBtn" class="teal">Connect</button>
+    </div>
+    <p class="note">On the board, switch Bluetooth on in <b>Settings</b> (or open the <b>Remote</b> app),
+      then pick <b>TTGO-Arcade</b> in the list.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span> Status</h2>
+    <div class="grid">
+      <div class="tile">
+        <div class="k">Battery</div>
+        <div class="v" id="batV">-</div>
+        <div class="battery" id="batBar"><i></i></div>
+        <div class="s" id="batS"></div>
+      </div>
+      <div class="tile">
+        <div class="k">WiFi</div>
+        <div class="v" id="wifiV">-</div>
+        <div class="s" id="wifiS"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span> Say something to Tigo</h2>
+    <div class="row">
+      <input id="msg" maxlength="60" placeholder="Hello Tigo!" autocomplete="off" enterkeyhint="send">
+      <button id="msgBtn" class="needs" disabled>Send</button>
+    </div>
+    <div class="counter"><span id="msgCount">0</span>/60</div>
+    <div class="chips" id="chips">
+      <button type="button">Hi Tigo!</button>
+      <button type="button">Pinch L, pinch R!</button>
+      <button type="button">Is that a high score?</button>
+      <button type="button">Time for a nap</button>
+      <button type="button">You're the best crab</button>
+    </div>
+    <p class="note">It pops up in Tigo's speech bubble on the screensaver and in the Tigo app. Accents are simplified (é → e).</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span> Treats</h2>
+    <div class="row">
+      <button id="treatBtn" class="needs wide" disabled>Throw a treat</button>
+      <button id="treat5Btn" class="needs sand" disabled>x5</button>
+    </div>
+    <p class="note">Tigo eats them next time you open his app. He never says no to a snack.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span> WiFi for the board</h2>
+    <form id="wifiForm" autocomplete="off">
+      <label for="ssid">Network name</label>
+      <input id="ssid" class="wide" maxlength="32" required autocapitalize="off" spellcheck="false">
+      <label for="pass">Password</label>
+      <div class="row">
+        <input id="pass" type="password" maxlength="64" autocapitalize="off" spellcheck="false">
+        <button type="button" id="showPass" class="ghost">Show</button>
+      </div>
+      <button id="wifiBtn" class="needs wide" style="margin-top:12px" disabled>Send to the board</button>
+    </form>
+    <p class="note">No typing on the board. The first time, your phone asks to <b>pair</b> with TTGO-Arcade:
+      the password only travels over the encrypted link and is not stored by this page.
+      Open networks: leave the password empty.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span> Clock</h2>
+    <button id="timeBtn" class="needs teal wide" disabled>Sync clock from this phone</button>
+    <p class="note">Sets the board's clock without WiFi. The Clock app shows it in its own time zone.</p>
+    <div id="log"></div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/iyotee/TTGO-Arcade">TTGO-Arcade on GitHub</a> · Tigo says hi
+  </footer>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const BASE = '7160c0de-5e11-4c0d-8a7c-7160a2cade';
+  const UUID = {
+    service: BASE + '00', message: BASE + '01', treat: BASE + '02',
+    wifi: BASE + '03', time: BASE + '04', status: BASE + '05',
+  };
+  const $ = id => document.getElementById(id);
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  let device = null, chars = {}, busy = Promise.resolve();
+
+  // ---------------- helpers ----------------
+  function log(s) {
+    const el = $('log');
+    const t = new Date().toLocaleTimeString();
+    el.textContent = (t + '  ' + s + '\n' + el.textContent).slice(0, 2000);
+  }
+  let bubbleTimer = 0;
+  function say(text, ms) {
+    const b = $('bubble');
+    b.textContent = text;
+    b.classList.add('show');
+    clearTimeout(bubbleTimer);
+    bubbleTimer = setTimeout(() => b.classList.remove('show'), ms || 2600);
+  }
+  function happy() {
+    const t = $('tigo');
+    t.classList.remove('happy');
+    void t.getBoundingClientRect();
+    t.classList.add('happy');
+  }
+  // one GATT operation at a time (Chrome rejects overlapping ones)
+  function queue(fn) {
+    const p = busy.then(fn);
+    busy = p.catch(() => {});
+    return p;
+  }
+  function setConnected(on, text) {
+    $('connState').textContent = text || (on ? 'Connected to ' + (device && device.name || 'TTGO-Arcade') : 'Not connected');
+    $('connDot').style.background = on ? 'var(--teal)' : '#ccc';
+    $('connectBtn').textContent = on ? 'Disconnect' : 'Connect';
+    $('connectBtn').className = on ? 'ghost' : 'teal';
+    document.querySelectorAll('.needs').forEach(b => b.disabled = !on);
+  }
+
+  // ---------------- support check ----------------
+  function checkSupport() {
+    let why = '';
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!window.isSecureContext) why = 'This page was opened without HTTPS. Open it from GitHub Pages (https://...) or localhost.';
+    else if (!navigator.bluetooth) why = ios ? 'iPhone and iPad browsers have no Web Bluetooth.'
+                                             : 'This browser has no Web Bluetooth (Firefox, Safari...). Try Chrome or Edge.';
+    if (why) {
+      $('unsupported').classList.remove('hidden');
+      $('unsupportedText').textContent = why;
+      $('connectBtn').disabled = true;
+      return false;
+    }
+    return true;
+  }
+
+  // ---------------- status ----------------
+  function showStatus(s) {
+    if (!s || !('bat' in s)) return;
+    if (typeof s.bat === 'number' && s.bat >= 0) {
+      $('batV').textContent = s.usb ? 'USB' : s.bat + ' %';
+      $('batBar').querySelector('i').style.width = Math.max(4, Math.min(100, s.usb ? 100 : s.bat)) * 0.54 + 'px';
+      $('batBar').classList.toggle('low', !s.usb && s.bat < 20);
+      $('batS').textContent = s.usb ? 'charging / on USB' : (s.mv ? (s.mv / 1000).toFixed(2) + ' V' : '');
+    }
+    if (!s.on) { $('wifiV').textContent = 'Off'; $('wifiS').textContent = s.ssid ? 'saved: ' + s.ssid : ''; }
+    else if (s.wifi) { $('wifiV').textContent = s.ssid || 'Connected'; $('wifiS').textContent = s.ip || ''; }
+    else { $('wifiV').textContent = 'Not connected'; $('wifiS').textContent = s.ssid ? 'trying ' + s.ssid : 'no network saved'; }
+    if (s.ssid && !$('ssid').value) $('ssid').value = s.ssid;
+  }
+  function parseStatus(dv) {
+    try { return JSON.parse(dec.decode(dv)); } catch (e) { return null; }
+  }
+  async function readStatus() {
+    if (!chars.status) return;
+    const s = parseStatus(await queue(() => chars.status.readValue()));
+    if (s) showStatus(s);
+  }
+
+  // ---------------- connection ----------------
+  async function connect() {
+    try {
+      setConnected(false, 'Looking for TTGO-Arcade...');
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [UUID.service] }, { name: 'TTGO-Arcade' }],
+        optionalServices: [UUID.service],
+      });
+      device.addEventListener('gattserverdisconnected', onDisconnected);
+      setConnected(false, 'Connecting...');
+      const server = await device.gatt.connect();
+      const svc = await server.getPrimaryService(UUID.service);
+      chars = {};
+      for (const k of ['message', 'treat', 'wifi', 'time', 'status']) chars[k] = await svc.getCharacteristic(UUID[k]);
+      chars.status.addEventListener('characteristicvaluechanged', ev => {
+        // a notification can be cut to the link's MTU: read the whole value then
+        const s = parseStatus(ev.target.value);
+        if (s) showStatus(s); else readStatus().catch(() => {});
+      });
+      await chars.status.startNotifications();
+      setConnected(true);
+      log('connected');
+      say('Hey! I can hear you!');
+      happy();
+      await readStatus();
+    } catch (e) {
+      if (device && device.gatt.connected) device.gatt.disconnect();
+      setConnected(false);
+      if (e.name !== 'NotFoundError') { log('connect failed: ' + e.message); say('Hmm, no crab found...'); }
+    }
+  }
+  function onDisconnected() {
+    chars = {};
+    setConnected(false);
+    log('disconnected');
+    say('Bye bye!');
+  }
+  $('connectBtn').addEventListener('click', () => {
+    if (device && device.gatt.connected) device.gatt.disconnect();
+    else connect();
+  });
+
+  async function write(name, data, what) {
+    if (!chars[name]) { say('Connect first!'); return false; }
+    try {
+      await queue(() => chars[name].writeValueWithResponse(data));
+      log(what + ' sent');
+      return true;
+    } catch (e) {
+      log(what + ' failed: ' + e.message);
+      say('Oops, that got lost at sea');
+      return false;
+    }
+  }
+
+  // ---------------- message ----------------
+  const msg = $('msg');
+  msg.addEventListener('input', () => $('msgCount').textContent = [...msg.value].length);
+  async function sendMessage(text) {
+    text = [...text.trim()].slice(0, 60).join('');
+    if (!text) return;
+    if (await write('message', enc.encode(text), 'message')) { say(text); happy(); }
+  }
+  $('msgBtn').addEventListener('click', () => sendMessage(msg.value).then(() => { msg.value = ''; $('msgCount').textContent = 0; }));
+  msg.addEventListener('keydown', e => { if (e.key === 'Enter' && !$('msgBtn').disabled) $('msgBtn').click(); });
+  $('chips').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    if (chars.message) sendMessage(e.target.textContent);
+    else { msg.value = e.target.textContent; msg.dispatchEvent(new Event('input')); }
+  });
+
+  // ---------------- treats ----------------
+  const YUM = ['Nom nom nom!', 'Crunchy!', 'More please!', 'Best. Snack. Ever.', 'Battery tastes like 3.7 V... this is better'];
+  function throwTreats(btn, n) {
+    const stage = document.querySelector('.stage').getBoundingClientRect();
+    const from = btn.getBoundingClientRect();
+    for (let i = 0; i < Math.min(n, 8); i++) {
+      const t = document.createElement('div');
+      t.className = 'treat' + (i % 2 ? ' alt' : '');
+      const x = from.left + from.width / 2 + (Math.random() - .5) * 40, y = from.top + window.scrollY;
+      t.style.left = x + 'px';
+      t.style.top = y + 'px';
+      t.style.position = 'absolute';
+      t.style.setProperty('--dx', (stage.left + stage.width / 2 - x + (Math.random() - .5) * 30) + 'px');
+      t.style.setProperty('--dy', (stage.top + window.scrollY + 120 - y) + 'px');
+      t.style.animationDelay = i * 70 + 'ms';
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 1200 + i * 70);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  async function sendTreats(btn, n) {
+    throwTreats(btn, n);
+    if (await write('treat', new Uint8Array([n]), n + ' treat' + (n > 1 ? 's' : ''))) {
+      setTimeout(() => { say(YUM[Math.floor(Math.random() * YUM.length)]); happy(); }, 700);
+    }
+  }
+  $('treatBtn').addEventListener('click', e => sendTreats(e.currentTarget, 1));
+  $('treat5Btn').addEventListener('click', e => sendTreats(e.currentTarget, 5));
+
+  // ---------------- WiFi ----------------
+  $('showPass').addEventListener('click', () => {
+    const p = $('pass');
+    p.type = p.type === 'password' ? 'text' : 'password';
+    $('showPass').textContent = p.type === 'password' ? 'Show' : 'Hide';
+  });
+  $('wifiForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const ssid = $('ssid').value, pass = $('pass').value;
+    if (!ssid || enc.encode(ssid).length > 32) { say('That network name is too long'); return; }
+    if (enc.encode(pass).length > 64) { say('That password is too long'); return; }
+    say('Pairing may pop up, say yes!', 3500);
+    if (await write('wifi', enc.encode(ssid + '\n' + pass), 'WiFi for ' + ssid)) {
+      $('pass').value = '';
+      say('Joining ' + ssid + '...', 3500);
+      happy();
+      setTimeout(() => readStatus().catch(() => {}), 8000);
+    }
+  });
+
+  // ---------------- clock ----------------
+  $('timeBtn').addEventListener('click', async () => {
+    const buf = new ArrayBuffer(4);
+    new DataView(buf).setUint32(0, Math.floor(Date.now() / 1000), true);
+    if (await write('time', buf, 'clock sync')) { say('Tick tock, got it!'); happy(); }
+  });
+
+  // ---------------- start ----------------
+  setConnected(false);
+  if (checkSupport()) say('Pinch L, pinch R!');
+  else say('I need Chrome to hear you...', 4000);
+  // a gentle look-around for the eyes
+  setInterval(() => {
+    const dx = (Math.random() - .5) * 6, dy = (Math.random() - .5) * 4;
+    $('pupils').style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+  }, 1800);
+})();
+</script>
+</body>
+</html>

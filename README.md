@@ -1,22 +1,55 @@
+<p align="center">
+  <img src="assets/tigo-logo.png" alt="Tigo the hermit crab holding a TTGO T-Display, next to the TTGO-Arcade lettering" width="760">
+</p>
+
+<p align="center">
+  <b>🦀 "Hi, I'm Tigo! Two claws, two buttons, 56 games. Pinch L, pinch R, let's play!"</b>
+</p>
+
 # 🎮 TTGO-Arcade
 
-> Retro arcade game collection for the **LilyGO TTGO T-Display V1.1** (ESP32).  
-> Featuring **56 playable two-button games** (including the original **Fringe**), **7 pocket tools**, WiFi (scan / password / WPS), a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
+> Retro arcade game collection for the **LilyGO TTGO T-Display V1.1** (ESP32), hosted by **Tigo**, a cheeky hermit crab who lives in your screensaver.  
+> Featuring **56 playable two-button games** (including the original **Fringe**), **10 pocket tools**, a Tamagotchi-style screensaver, a PIN lock, a WiFi clock, a Bluetooth remote for your phone, a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
 
 ---
 
 ## ✨ Features
 
 - **56 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
-- **7 Pocket Tools** — **Stopwatch** (with laps), **Flashlight** (White, Warm, Red, SOS, Strobe), **Dice** (dice, coin, D20, 1-100, yes/no), **Tally** two-player counter, **Countdown** timer with flashing alarm, **Morse** keyer/decoder and guided **Breathing**.
+- **10 Pocket Tools** — **Tigo** (feed, play with and clean the mascot), **Clock** (NTP over WiFi, time zones, digital / analog), **Remote** (Bluetooth camera shutter, music and slides for iPhone & Android), **Stopwatch** (with laps), **Flashlight** (White, Warm, Red, SOS, Strobe), **Dice** (dice, coin, D20, 1-100, yes/no), **Tally** two-player counter, **Countdown** timer with flashing alarm, **Morse** keyer/decoder and guided **Breathing**.
+- **Tigo's Screensaver** — An animated beach where Tigo wanders, talks in speech bubbles, eats, naps and pinches your battery badge.
+- **PIN Lock** — Optional 4-8 press L/R combination (e.g. `LLRL`), off by default.
+- **Bluetooth** — A phone remote (no app needed) and a **Companion web page** to message Tigo, send treats, share your WiFi password and sync the clock.
 - **Smooth Animated Menu** — 60 fps scrolling list with live animated game icons, mini battery/USB status badge, and fast scroll on `Hold L`.
-- **Persistent Saves (NVS)** — Remembers high scores, last played game, brightness, auto-sleep timer, and USB logging state across power-offs.
-- **Power & Diagnostics** — 5 brightness levels, configurable auto-sleep (`30s` / `60s` / `2m` / `5m` / `Off`), deep sleep with single-button wake, battery voltage curve, and crash reporting.
+- **Persistent Saves (NVS)** — Remembers high scores, last played game, brightness, screensaver and sleep timers, PIN, Tigo, WiFi and Bluetooth state, and USB logging across power-offs.
+- **Power & Diagnostics** — 5 brightness levels, short or long idle timers (`5s` up to `10m`), deep sleep with single-button wake, battery voltage curve, and crash reporting.
 - **Easy to Extend** — Add a new game with one `src/<game>.cpp` file and two one-line registrations.
 
 ---
 
+## 🦀 Meet Tigo
+
+> 🦀 *"Battery tastes like 3.7 V."*
+
+**Tigo** is the mascot of TTGO-Arcade (his name comes from "**Ti-Ti-Go**"). He is a coral-red hermit crab with a cream spiral conch on his back, two big eyes on stalks and **two big claws, one for each button**: press **L** or **R** and he snaps that claw. Curious, cheeky, playful and a little bit dramatic, he loves pinching things (especially the battery icon), collects shells and lives on a beach, by day or by night.
+
+**His screensaver life** — when you leave the board alone, Tigo takes over the screen:
+
+- 🏖️ He **wanders** along the beach, looks around and blinks.
+- 💬 He **talks** in little speech bubbles ("Pinch L, pinch R!", "Is that a high score?").
+- 🍤 He **eats** snacks, then **poops and buries it** in the sand like a proper gentlecrab.
+- 😴 He **naps** in his shell when he gets sleepy.
+- 🔋 He **plays with the battery and WiFi badges**: pinching the battery is his favourite hobby.
+- 📱 He **reads messages sent from your phone** (see the Companion page) and munches the treats you send.
+- 🐚 He shows off his **shells**: new ones unlock as you set high scores.
+
+Press any button to wake the board from the screensaver (then the PIN lock if it is on, then the menu).
+
+---
+
 ## 🕹️ Controls Overview
+
+> 🦀 *"Left claw, right claw. That's the whole keyboard. Easy!"*
 
 The board has two buttons:
 - **L** — `GPIO0` (also the `BOOT` button)
@@ -27,10 +60,13 @@ The board has two buttons:
 - **Title Screen**: press any button to start
 - **Game Over**: `L` return to menu · `R` play again
 - **Tools**: `Hold L` returns to the menu (Torch: `Tap R`)
+- **Screensaver**: any button wakes it
 
 ---
 
 ## 🎯 Games (56)
+
+> 🦀 *"Is that a high score? Beat it and I unlock a new shell!"*
 
 ### ✨ Original
 | Game | Controls | Goal |
@@ -112,10 +148,15 @@ The board has two buttons:
 
 ---
 
-## 🛠️ Pocket Tools
+## 🛠️ Pocket Tools (10)
+
+> 🦀 *"Not everything is a game. Some things are a game with a clock."*
 
 | Tool | Controls | Description |
 |---|---|---|
+| **Tigo** | `Tap L` feed · `Tap R` play · `Hold R` clean · `Hold L` menu | Look after Tigo: hunger, fun and clean bars; shells unlock from your high scores |
+| **Clock** | `Tap L` next time zone · `Tap R` digital / analog · `Hold L` menu | Time from NTP over WiFi (or from your phone via Bluetooth); default zone Europe/Zurich |
+| **Remote** | `Hold L + R` switch mode (Camera / Music / Slides) · `Hold L` menu | Bluetooth remote for iPhone & Android, no app (see below) |
 | **Timer** | `Tap R` start/stop · `Tap L` lap/reset · `Hold L` menu | Precision stopwatch with up to 5 lap splits |
 | **Torch** | `Tap L` cycle mode · `Tap R` menu | Full-screen flashlight at max brightness (`White`, `Warm`, `Red`, `SOS`, `Strobe`) |
 | **Dice** | `Tap L` mode · `Tap R` roll · `Hold L` menu | 1–5 dice with total, coin flip, D20, 1–100 or yes/no (mode is remembered) |
@@ -124,24 +165,85 @@ The board has two buttons:
 | **Morse** | `Tap L` dot · `Tap R` dash · `Hold R` delete · `Hold L` menu | Morse keyer: decodes what you tap, with a live cheat sheet of matching letters |
 | **Breathe** | `Tap L` pattern · `Tap R` start / pause · `Hold L` menu | Guided breathing (Box 4-4-4-4, Relax 4-7-8, Calm 5-5) with an animated circle |
 
+### 🐚 Tigo app
+Tigo's own little Tamagotchi corner. `Tap L` **feeds** him, `Tap R` **plays** with him, `Hold R` **cleans** up after him, `Hold L` goes back to the menu. Three bars show his **hunger**, **fun** and **clean** levels; a happy Tigo is a chatty Tigo in the screensaver. Your **high scores unlock new shells** for his collection.
+
+### 🕰️ Clock app
+A desk clock with **digital** and **analog** faces (`Tap R` switches). The time comes from **NTP over WiFi** (switch WiFi on in Settings), or from **your phone** through the Companion page over Bluetooth. `Tap L` steps through **time zones** (default **Europe/Zurich**, `CET-1CEST,M3.5.0,M10.5.0/3`, with automatic daylight saving). `Hold L` returns to the menu.
+
+---
+
+## 📶 Bluetooth
+
+> 🦀 *"I can pinch your phone's buttons too. From here."*
+
+Switch **Bluetooth** on in Settings. The board shows up as **`TTGO-Arcade`**.
+
+### Remote app (Bluetooth HID, no app needed)
+Pair **`TTGO-Arcade`** from your phone's Bluetooth settings (works on **iPhone and Android**, no app to install), then open **Remote** in the tools menu. `Hold L + R` switches mode, `Hold L` returns to the menu.
+
+| Mode | Controls | Use it for |
+|---|---|---|
+| **Camera** | `Tap L` or `Tap R` shutter (volume up) | Group photos and selfies from a distance |
+| **Music** | `Tap L` previous · `Tap R` next · `Hold R` play / pause | Your playlist, from across the room |
+| **Slides** | `Tap L` previous · `Tap R` next | Presentations |
+
+### Companion web page
+**👉 [iyotee.github.io/TTGO-Arcade/companion.html](https://iyotee.github.io/TTGO-Arcade/companion.html)**
+
+Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it does **not** work on iPhone), press *Connect* and pick `TTGO-Arcade`. From the page you can:
+
+- 💬 **send Tigo a message**, shown in his speech bubble on the screensaver;
+- 🍤 **send treats** (he eats them on screen);
+- 📶 **send a WiFi name and password**, so you never type on the board;
+- 🕰️ **sync the clock** from your phone (no WiFi needed);
+- 🔋 **see the battery and WiFi status** of the board.
+
+> **Note for forks:** the page lives in `docs/companion.html` and is served by **GitHub Pages**. Enable it under *Settings → Pages → Deploy from a branch → `main` / `/docs`*.
+
 ---
 
 ## ⚙️ Menu, Settings & Sleep
 
-- **Menu**: Shows a live battery/USB badge top-left and remembers the last played game.
-- **Settings**:
-  - **Battery**: Live charge percentage and voltage (or `USB power` while plugged in).
-  - **Brightness**: 5 PWM levels (`R` cycles and saves to NVS).
-  - **USB log**: Toggle diagnostic serial logging (`115200` baud).
-  - **Auto-sleep**: Configurable idle timeout (`30s`, `60s`, `2m`, `5m`, or `Off`).
-  - **WiFi**: On/Off (saved; reconnects to the saved network at boot), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`). A WiFi badge shows in the menu while connected. WiFi drains the battery faster: switch it off when you don't need it.
-  - **Reset scores**: Submenu to clear **All games** or any individual game's best score (with confirmation).
-  - **Crash indicator**: Displays an orange warning at the bottom if a previous reset/watchdog crash occurred (e.g. `! crash in Flappy`).
-- **Sleep**: Puts the ESP32 into deep sleep with backlight and battery ADC disabled. Press **R** (`GPIO35`) to wake back to the menu.
+> 🦀 *"Settings? I only need one: more snacks."*
+
+- **Menu**: Shows a live battery/USB badge top-left (plus a WiFi badge when connected) and remembers the last played game.
+- **Settings** (scrolling list):
+
+| Row | Values | What it does |
+|---|---|---|
+| **Brightness** | 5 levels | PWM backlight level |
+| **Screensaver** | `Off`, `5s`, `8s`, `10s`, `15s`, `20s`, `30s`, `1m`, `2m`, `5m` (default `15s`) | Idle time before Tigo's screensaver |
+| **Sleep** | `5s`, `8s`, `10s`, `15s`, `20s`, `30s`, `1m`, `2m`, `5m`, `10m`, `Never` (default `1m`) | Time spent in the screensaver before deep sleep, or idle time before deep sleep when the screensaver is `Off` |
+| **PIN lock** | `Off` / `On` (default `Off`) | Ask for the PIN at boot, on wake from deep sleep and when leaving the screensaver |
+| **Change PIN** | | Set a new 4-8 press combination |
+| **WiFi >** | submenu | See below |
+| **Bluetooth** | `On` / `Off` | Remote app and Companion page |
+| **USB log** | `On` / `Off` | Diagnostic serial logging (`115200` baud) |
+| **Reset scores >** | submenu | Clear **All games** or any individual game's best score (with confirmation) |
+| **Back** | | Return to the menu |
+
+- **WiFi >**: On/Off (saved; reconnects to the saved network at boot), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`), or sent from the Companion page. A WiFi badge shows in the menu while connected. WiFi drains the battery faster: switch it off when you don't need it.
+- **Crash indicator**: Displays an orange warning at the bottom if a previous reset/watchdog crash occurred (e.g. `! crash in Flappy`).
+
+### 😴 Screensaver & sleep timers
+1. After the **Screensaver** idle time, Tigo's beach screensaver starts.
+2. After the **Sleep** time spent in the screensaver, the board goes into **deep sleep** (backlight and battery ADC off). With the screensaver `Off`, **Sleep** is simply the idle time before deep sleep. `Never` keeps the board awake.
+3. Any button leaves the screensaver; press **R** (`GPIO35`) to wake from deep sleep. If the PIN lock is on, it asks for the PIN first, then you are back in the menu.
+
+### 🔒 PIN lock
+> 🦀 *"LLRL? I won't tell anyone. Probably."*
+
+- **Set it**: *Settings → Change PIN*, tap **L** / **R** 4 to 8 times (e.g. `LLRL`), **hold L + R** to confirm, then enter it again to confirm. Turn **PIN lock** `On` to use it (it is `Off` by default).
+- **Unlock**: just type the combination; it is checked automatically once you reach its length.
+- **Lockout**: after **5 wrong tries** you must wait **30 s** before trying again.
+- **When**: at boot, on wake from deep sleep, and when leaving the screensaver.
 
 ---
 
 ## 🚀 Building & Flashing
+
+> 🦀 *"Flash me gently, I'm made of 3 MB of pure crab."*
 
 Requires [PlatformIO](https://platformio.org/) (VS Code extension or `pio` CLI). Dependencies (`espressif32@6.9.0`, `TFT_eSPI@^2.5.43`) are fetched automatically on first build.
 
@@ -154,21 +256,32 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
 > **Note:** All `TFT_eSPI` pin and driver flags live in `platformio.ini`, so no manual edits inside `.pio/libdeps/` are required.  
 > If your display appears upside down, set `SCREEN_ROTATION` to `2` in `src/common.h` (this also swaps L/R button mapping).
 
+> **Flash layout:** the firmware uses `board_build.partitions = huge_app.csv` (**3 MB app, no OTA**) because WiFi + Bluetooth need the room. Updates are done over USB. Your **high scores and settings are kept** when you upgrade from an older build, since the NVS partition does not move.
+
 ---
 
 ## 🧩 Project Structure
 
 ```text
-├── platformio.ini        # Board, libraries, TFT_eSPI build flags, upload config
+├── platformio.ini        # Board, libraries, TFT_eSPI build flags, partitions, upload config
 ├── README.md             # Project documentation
+├── assets/               # Tigo artwork: tigo-logo.svg / .png (this header), tigo.svg
+├── docs/
+│   └── companion.html    # Web Bluetooth companion page (GitHub Pages)
 └── src/
     ├── common.h          # Pin definitions, shared helpers, game declarations
     ├── main.cpp          # Scrolling menu, shared HUD/Game Over UI, setup/loop
-    ├── power.cpp         # PWM backlight, battery ADC curve, deep sleep, auto-sleep
+    ├── power.cpp         # PWM backlight, battery ADC curve, deep sleep, idle timers
     ├── diag.cpp          # USB logging & persistent crash diagnostics
     ├── settings.cpp      # Settings UI, Reset Scores submenu & confirmation modal
+    ├── tigo.cpp          # drawTigo(): the mascot, in all his poses
+    ├── saver.cpp         # Tigo's beach screensaver
+    ├── lockscr.cpp       # PIN lock: set, unlock, lockout
+    ├── clock.cpp         # Time service: NTP sync, time zones
+    ├── ble.cpp           # Bluetooth: HID remote + companion page service
     ├── wifi.cpp          # WiFi: reconnect, scan, connect, WPS (push button)
     ├── wifiui.cpp        # WiFi screens: status, network list, password wheel, WPS
+    ├── tigoapp.cpp, clockapp.cpp, remote.cpp                      # Tigo, Clock and Remote tools
     ├── timer.cpp         # Stopwatch tool
     ├── torch.cpp         # Flashlight tool
     ├── dice.cpp, tally.cpp, minute.cpp, morse.cpp, breathe.cpp   # Other tools
@@ -181,8 +294,14 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
 
 ## 🔧 Troubleshooting
 
+> 🦀 *"Something's wrong? Don't panic. I'll hide in my shell, you read this."*
+
 - **Upload fails** (`No serial data received` / `serial noise`): Run `pio run -t upload` again (the CH9102 USB-serial chip occasionally needs a retry), or hold **L (BOOT)** while upload starts. Keep `upload_speed = 460800`.
 - **Screen is black**: The board is in deep sleep — press **R** (`GPIO35`) to wake it.
+- **Forgot your PIN**: Reflash the firmware after erasing the flash (`pio run -t erase`, then `pio run -t upload`); this also clears high scores and settings.
+- **Clock shows no time**: Switch WiFi on and connect to a network, or sync the clock from the Companion page.
+- **Phone can't find `TTGO-Arcade`**: Check that **Bluetooth** is `On` in Settings; on iPhone pair it from *Settings → Bluetooth*. If it was paired before a reflash, *forget* it on the phone and pair again.
+- **Companion page won't connect**: Use Chrome on Android or desktop (Web Bluetooth is not available on iPhone).
 - **Debugging**: Enable `Settings → USB log` and run `pio device monitor`.
 
 ---
@@ -196,3 +315,10 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
   - 2-pin 1.25 mm JST LiPo battery connector
 - **Battery**: 3.7 V LiPo (e.g., `102540`)
 - **3D Printable Case**: [Kivo Case for LilyGO T-Display](https://makerworld.com/en/models/3387545-kivo-case-lilygo-t-display-project?from=search#profileId-3855076)
+
+---
+
+<p align="center">
+  <img src="assets/tigo.svg" alt="Tigo" width="120"><br>
+  <i>🦀 "Thanks for playing! Now go set a high score, I want a new shell." 🐚</i>
+</p>
