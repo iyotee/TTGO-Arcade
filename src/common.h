@@ -5,6 +5,7 @@
 #include <TFT_eSPI.h>
 #include <Preferences.h>
 #include "driver/gpio.h"
+#include <time.h>
 
 // ---------------- configuration ----------------
 #define SCREEN_ROTATION 0        // 0 or 2 (both portrait). Use 2 if the picture is upside down.
@@ -77,7 +78,8 @@ const char *sleepLabel();
 int batteryMilliVolts();
 int batteryPercent(int mv);
 bool onUsbPower(int mv);
-void goToSleep();                     // deep sleep; the WAKE_PIN button restarts the board
+void goToSleep();                     // idle action: screensaver (if on), later deep sleep
+void deepSleepNow();                  // deep sleep right away; the WAKE_PIN button restarts the board
 
 void returnToMenu();
 int numGames();
@@ -103,6 +105,29 @@ int wifiWpsState();
 void wifiStopWps();
 void wifiForget();
 void wifiShutdown();                  // before deep sleep
+
+// ---------------- idle: screensaver and PIN lock ----------------
+namespace saver { void begin(); bool update(uint32_t now); }     // update(): false once a button woke it
+namespace lockscr { bool enabled(); void begin(); bool update(uint32_t now); }   // update(): false once unlocked
+
+// ---------------- Tigo, the hermit-crab mascot (tigo.cpp) ----------------
+enum TigoPose { TIGO_IDLE, TIGO_WALK, TIGO_EAT, TIGO_SLEEP, TIGO_HAPPY, TIGO_SAD, TIGO_PINCH, TIGO_HIDE };
+// (cx, cy) = centre of the bottom of the shell, size = overall height in px, t = animation clock in ms
+void drawTigo(int cx, int cy, int size, TigoPose pose, uint32_t t, bool faceLeft);
+
+// ---------------- time (clock.cpp) ----------------
+void timeService(uint32_t now);       // called from loop(): NTP sync once WiFi is up
+bool timeIsSet();
+bool localTimeNow(struct tm *out);    // false until the time is known
+
+// ---------------- Bluetooth (ble.cpp) ----------------
+void initBle();                       // in setup(): starts BLE if it was left on
+void bleService(uint32_t now);        // called from loop()
+bool bleEnabled();
+void setBleEnabled(bool on);          // saved
+bool bleConnected();
+bool bleTakeMessage(char *buf, size_t n);   // text sent from the companion page, for Tigo's bubbles
+int bleTakeTreats();                  // treats sent from the phone since the last call
 
 // ---------------- diagnostics (diag.cpp) ----------------
 void initDiag(const char *(*itemName)(int));   // after prefs.begin(); item -1 = menu
@@ -209,5 +234,11 @@ DECLARE_GAME(morse)
 namespace morse { void menuInfo(char *buf, size_t n); }
 DECLARE_GAME(breathe)
 namespace breathe { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(tigoapp)                 // Tigo: feed / play / clean the mascot
+namespace tigoapp { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(clockapp)
+namespace clockapp { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(remote)                  // Bluetooth remote (camera / music / slides)
+namespace remote { void menuInfo(char *buf, size_t n); }
 DECLARE_GAME(settings)                // not a game, but uses the same entry points
 namespace settings { void menuInfo(char *buf, size_t n); }

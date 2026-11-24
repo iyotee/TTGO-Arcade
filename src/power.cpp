@@ -68,7 +68,9 @@ int batteryPercent(int mv) {
 // with USB connected the pin sees the ~5 V supply instead of the battery
 bool onUsbPower(int mv) { return mv >= 4350; }
 
-void goToSleep() {
+void goToSleep() { deepSleepNow(); }   // placeholder until the screensaver flow exists
+
+void deepSleepNow() {
   dbg("going to sleep\n");
   wifiShutdown();
   if (usbLogOn()) Serial.flush();

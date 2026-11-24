@@ -145,7 +145,7 @@ void sleepNow() {
   spr.drawString("Press " WAKE_BTN " to wake", 67, 164, 2);
   spr.pushSprite(0, 0);
   delay(1500);
-  goToSleep();
+  deepSleepNow();
 }
 
 // ---------------- menu ----------------
@@ -216,6 +216,9 @@ static const MenuItem ITEMS[] = {
   GAME("Bowl",   "bowl_hi",    bowl),
   GAME("Reversi", "reversi_hi", reversi),
   GAME("Fringe",  "fringe_hi",  fringe),
+  {"Tigo",     nullptr, tigoapp::begin,  tigoapp::update,  tigoapp::drawIcon,  tigoapp::menuInfo,  "open"},
+  {"Clock",    nullptr, clockapp::begin, clockapp::update, clockapp::drawIcon, clockapp::menuInfo, "open"},
+  {"Remote",   nullptr, remote::begin,   remote::update,   remote::drawIcon,   remote::menuInfo,   "open"},
   {"Timer",    nullptr, timer::begin,    timer::update,    timer::drawIcon,    timer::menuInfo,    "open"},
   {"Torch",    nullptr, torch::begin,    torch::update,    torch::drawIcon,    torch::menuInfo,    "open"},
   {"Dice",     nullptr, dice::begin,     dice::update,     dice::drawIcon,     dice::menuInfo,     "open"},
@@ -438,6 +441,7 @@ void setup() {
   initDiag(itemName);
   initBacklight();
   initWifi();
+  initBle();
   selected = prefs.getUChar("game", 0) % NUM_ITEMS;
   if (!ITEMS[selected].hiKey) selected = 0;
   scroll = scrollTarget();         // start with the remembered game in view, no animation
@@ -449,6 +453,8 @@ void loop() {
   uint32_t now = millis();
   if (active >= 0) ITEMS[active].update(now);
   else updateMenu(now);
+  timeService(now);
+  bleService(now);
 
   static uint32_t lastLog = 0;
   if (usbLogOn() && now - lastLog >= 5000) {
