@@ -57,6 +57,15 @@ jobs:
           PLATFORMIO_BUILD_FLAGS: -DFW_BUILD=${{ github.run_number }}
         run: pio run -e cartridge
 
+      - name: Keep the symbols for crash reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: elf-${{ github.run_number }}
+          path: |
+            .pio/build/ttgo-t-display/firmware.elf
+            .pio/build/cartridge/firmware.elf
+          retention-days: 90
+
       - name: Assemble the site and the manifest
         run: |
           mkdir -p site/fw

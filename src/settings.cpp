@@ -13,14 +13,15 @@
 #include "lockscr.h"
 #include "themeui.h"
 #include "updates.h"
+#include "crashrec.h"
 
 namespace wifiui { void open(); bool update(uint32_t now); }
 
 namespace settings {
 
 enum Row { ROW_BRIGHTNESS, ROW_THEME, ROW_SAVER, ROW_SLEEP, ROW_PIN, ROW_CHANGEPIN, ROW_WIFI, ROW_UPDATES, ROW_OTA,
-           ROW_BLE, ROW_USBLOG, ROW_RESET, ROW_BACK, NUM_ROWS };
-enum Screen { SCR_MAIN, SCR_RESET, SCR_CONFIRM, SCR_WIFI, SCR_OTA, SCR_UPDATES };
+           ROW_BLE, ROW_USBLOG, ROW_RESET, ROW_CRASH, ROW_BACK, NUM_ROWS };
+enum Screen { SCR_MAIN, SCR_RESET, SCR_CONFIRM, SCR_WIFI, SCR_OTA, SCR_UPDATES, SCR_CRASH };
 
 static Screen screen = SCR_MAIN;
 static int row = ROW_BRIGHTNESS;
@@ -145,6 +146,12 @@ static void renderRow(int r, int y) {
     case ROW_RESET:
       drawValueRow(y, sel, "Reset scores", ">", theme().keyHint);
       break;
+    case ROW_CRASH: {
+      CrashInfo c;
+      bool any = crashInfo(&c);
+      drawValueRow(y, sel, "Crash report", any ? "!  >" : "none", any ? TFT_ORANGE : softCol());
+      break;
+    }
     default:                                            // ROW_BACK
       drawRowBox(y, 22, sel);
       spr.setTextDatum(TC_DATUM);
@@ -223,7 +230,7 @@ static void renderMain() {
                   : row == ROW_PIN                    ? (lockscr::enabled() ? "turn off" : "turn on")
                   : row == ROW_CHANGEPIN              ? (lockscr::enabled() ? "change" : "-")
                   : row == ROW_USBLOG || row == ROW_BLE ? "toggle"
-                  : row == ROW_RESET || row == ROW_WIFI || row == ROW_OTA || row == ROW_UPDATES ? "open"
+                  : row == ROW_RESET || row == ROW_WIFI || row == ROW_OTA || row == ROW_UPDATES || row == ROW_CRASH ? "open"
                                                         : "back";
   drawThemedFooter("next", act);
 }
@@ -371,8 +378,9 @@ void begin() {
 }
 
 void update(uint32_t now) {
-  if (screen == SCR_WIFI || screen == SCR_OTA || screen == SCR_UPDATES) {   // these screens run themselves
-    bool stay = screen == SCR_WIFI ? wifiui::update(now) : screen == SCR_OTA ? otaui::update(now) : updui::update(now);
+  if (screen == SCR_WIFI || screen == SCR_OTA || screen == SCR_UPDATES || screen == SCR_CRASH) {   // these run themselves
+    bool stay = screen == SCR_WIFI ? wifiui::update(now) : screen == SCR_OTA ? otaui::update(now)
+              : screen == SCR_CRASH ? crashui::update(now) : updui::update(now);
     if (!stay) {
       screen = SCR_MAIN;
       pressedL = pressedR = false;
@@ -427,6 +435,10 @@ void update(uint32_t now) {
       } else if (row == ROW_UPDATES) {
         screen = SCR_UPDATES;
         updui::open();
+        return;
+      } else if (row == ROW_CRASH) {
+        screen = SCR_CRASH;
+        crashui::open();
         return;
       } else {
         screen = SCR_RESET;

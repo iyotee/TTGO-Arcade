@@ -6,6 +6,11 @@
 
 #include "common.h"
 #include <stdarg.h>
+#include "crashrec.h"
+
+#ifndef FW_BUILD
+#define FW_BUILD 0
+#endif
 
 static bool usbLog = false;
 
@@ -56,8 +61,9 @@ void initDiag(const char *(*itemName)(int)) {
   const char *item = rtcMagic == RTC_MAGIC ? itemName(rtcItem) : "?";
   if (kind) {
     char buf[40];
-    snprintf(buf, sizeof buf, "%s in %s", kind, item);
+    snprintf(buf, sizeof buf, "%s in %s (b%u)", kind, item, (unsigned)FW_BUILD);
     prefs.putString("lastcrash", buf);
+    if (why != ESP_RST_POWERON) crashRecOnBoot(item);   // backtrace from the panic handler, if any
   }
   dbg("\n=== boot: reset reason %d%s%s ===\n", (int)why, kind ? ", " : "", kind ? kind : "");
   noteActiveItem(-1);
