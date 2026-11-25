@@ -236,6 +236,9 @@ DECLARE_GAME(fish)
 DECLARE_GAME(bowl)
 DECLARE_GAME(reversi)
 DECLARE_GAME(fringe)
+DECLARE_GAME(pool)
+DECLARE_GAME(abyx)
+DECLARE_GAME(cryptgame)               // "crypt" alone clashes with libc crypt()
 
 DECLARE_GAME(timer)                   // tools (use the same entry points)
 namespace timer { void menuInfo(char *buf, size_t n); }

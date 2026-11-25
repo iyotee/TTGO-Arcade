@@ -179,6 +179,7 @@ struct MenuItem {
 static const MenuItem ITEMS[] = {
   GAME("2048",    "g2048_hi",   game2048),
   GAME("21",      "bj21_hi",    blackjack),
+  GAME("Abyx",    "abyx_hi",    abyx),
   GAME("Bowl",    "bowl_hi",    bowl),
   GAME("Bricks",  "bricks_hi",  bricks),
   GAME("Bumper",  "bumper_hi",  bumper),
@@ -189,6 +190,7 @@ static const MenuItem ITEMS[] = {
   GAME("Code",    "code_hi",    codebreak),
   GAME("Columns", "columns_hi", columns),
   GAME("Crossy",  "crossy_hi",  crossy),
+  GAME("Crypt",   "crypt_hi",   cryptgame),
   GAME("Dino",    "dino_hi",    dino),
   GAME("Dodge",   "dodge_hi",   dodge),
   GAME("Doodle",  "doodle_hi",  doodle),
@@ -215,6 +217,7 @@ static const MenuItem ITEMS[] = {
   GAME("Pinball", "pinball_hi", pinball),
   GAME("Plinko",  "plinko_hi",  plinko),
   GAME("Pong 2P", "pong2p_hi",  pong2p),
+  GAME("Pool",    "pool_hi",    pool),
   GAME("Pop",     "pop_hi",     pop),
   GAME("Race",    "race_hi",    race),
   GAME("Reversi", "reversi_hi", reversi),
