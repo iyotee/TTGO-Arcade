@@ -1,4 +1,5 @@
-// Screensaver: Tigo's beach, a little living tamagotchi scene.
+// Screensaver: Tigo's beach, a little living tamagotchi scene (Neon theme:
+// the same beach at night, under a neon-lit skyline with glowing signs).
 //
 // Controls (two buttons):
 //   Any button : wake up (the caller then shows the PIN lock if it is on, then the menu)
@@ -37,6 +38,11 @@ struct Pal { uint16_t sky0, sky1, sea0, sea1, sand0, sand1, wet; };
 static const Pal DAY   = {0x4D1D, 0xCF5F, 0x2D37, 0x6E99, 0xF6B4, 0xE611, 0xD58F};
 static const Pal DUSK  = {0x5A53, 0xFD8F, 0x4B74, 0xDCD1, 0xEDF2, 0xD52F, 0xC4CE};
 static const Pal NIGHT = {0x0044, 0x192A, 0x0949, 0x1A4D, 0x8BED, 0x6B09, 0x62C8};
+static const Pal NEON  = {0x0802, 0x406A, 0x0845, 0x1889, 0x30A8, 0x1844, 0x20CA};
+// neon tubes and the night city
+static const uint16_t N_PINK = 0xF959, N_CYAN = 0x073F, N_YELLOW = 0xFF45, N_LIME = 0x97E7, N_RED = 0xF8C7;
+static const uint16_t BLD = 0x1023, BLD2 = 0x1845, POST = 0x3068, ARC_OFF = 0x398B, N_PANEL = 0x1825;
+static const uint16_t WIN[3] = {0x93C5, 0x1C12, 0x914F};
 
 // ---------------- state ----------------
 enum Act { A_IDLE, A_WANDER, A_TALK, A_EAT, A_POOP, A_NAP, A_SHELL, A_BALL, A_BATT, A_DRAG, A_SIT,
@@ -63,6 +69,7 @@ static bool usb = false, usbWas = false;
 static uint32_t battAt = 0;
 static const Pal *pal = &DAY;
 static bool night = false, haveTime = false;
+static bool neon = false;                 // Neon theme: night city scene, neon signs
 static struct tm tmNow;
 
 static int pendingTreats = 0;
@@ -101,7 +108,8 @@ static void readEnv(uint32_t now) {
   haveTime = timeIsSet() && localTimeNow(&tmNow);
   int h = haveTime ? tmNow.tm_hour : 12;
   night = haveTime && (h >= 21 || h < 6);
-  pal = !haveTime ? &DAY : night ? &NIGHT : (h == 6 || h == 19 || h == 20) ? &DUSK : &DAY;
+  neon = theme().neon;
+  pal = neon ? &NEON : !haveTime ? &DAY : night ? &NIGHT : (h == 6 || h == 19 || h == 20) ? &DUSK : &DAY;
 }
 
 // ---------------- talking ----------------
@@ -117,6 +125,18 @@ static const char *const LINES[] = {
   "Is it snack o'clock yet?", "This shell? Vintage.", "Small crab, big dreams.",
 };
 static const int NUM_LINES = sizeof LINES / sizeof LINES[0];
+// extra swagger for neon Tigo
+static const char *const NEON_LINES[] = {
+  "Stay fresh, stay crabby", "Neon mode: ON", "Shades on. Claws up.", "Too cool for the shell.",
+  "Cap backwards = speed +10", "This chain? Solid pixels.", "Glow hard or go home.",
+  "Night shift, crab style.", "Sprayed my shell myself.", "Can't see the screen. Worth it.",
+};
+static const int NUM_NEON_LINES = sizeof NEON_LINES / sizeof NEON_LINES[0];
+
+static const char *randomLine() {
+  if (neon && irand(2)) return NEON_LINES[irand(NUM_NEON_LINES)];
+  return LINES[irand(NUM_LINES)];
+}
 
 static void sayContext(uint32_t now) {
   tigo::Needs &n = tigo::needs();
@@ -179,11 +199,11 @@ static void sayContext(uint32_t now) {
         if (bleConnected()) { say(now, 0, "Hello phone! *waves claw*"); return; }
         break;
       default:
-        say(now, 0, "%s", LINES[irand(NUM_LINES)]);
+        say(now, 0, "%s", randomLine());
         return;
     }
   }
-  say(now, 0, "%s", LINES[irand(NUM_LINES)]);
+  say(now, 0, "%s", randomLine());
 }
 
 // ---------------- behaviour ----------------
@@ -561,10 +581,220 @@ static void stepProps(float dt) {
   if (mound > 0) mound = max(0.0f, mound - dt / 4.0f);
 }
 
+// ---------------- rendering: neon night scene (Neon theme) ----------------
+// a neon tube along a line: faint halo, glow, bright core
+static void tube(float ax, float ay, float bx, float by, float w, uint16_t c, uint16_t bg) {
+  spr.drawWideLine(ax, ay, bx, by, w + 3.2f, tft.alphaBlend(55, c, bg));
+  spr.drawWideLine(ax, ay, bx, by, w + 1.4f, tft.alphaBlend(130, c, bg));
+  spr.drawWideLine(ax, ay, bx, by, w, c);
+}
+
+// on/off flicker of a neon sign: mostly on, two quick drop-outs every few seconds
+static bool flickerOn(uint32_t t, uint32_t period, uint32_t phase) {
+  uint32_t p = (t + phase) % period;
+  return !(p < 90 || (p > 180 && p < 260));
+}
+
+static const uint8_t BLD_X[] = {0, 13, 29, 41, 58, 73, 90, 105, 121};     // skyline: left edges
+static const uint8_t BLD_H[] = {22, 34, 18, 40, 26, 31, 44, 24, 33};      // heights above the horizon
+static const int NUM_BLD = sizeof BLD_X;
+
+static void drawSkyNeon(uint32_t t) {
+  spr.fillRectVGradient(0, 0, SCR_W, HORIZON, pal->sky0, pal->sky1);
+  for (int i = 0; i < 20; i++) {             // a few stars over the city glow
+    uint32_t h = hash32(i + 11);
+    int x = h % SCR_W, y = (h >> 8) % (HORIZON - 40);
+    uint8_t a = 60 + (uint8_t)(150 * triWave(t + (h >> 16) % 3000, 2600 + (h >> 20) % 1500));
+    uint16_t c = tft.alphaBlend(a, (h >> 4) % 3 ? WHITE : (h & 2 ? N_CYAN : N_PINK), pal->sky0);
+    spr.drawPixel(x, y, c);
+  }
+  // moon with a soft glow and a bite
+  uint16_t mbg = tft.alphaBlend(150, pal->sky0, pal->sky1);
+  spr.drawSpot(116, 70, 11, tft.alphaBlend(40, N_PINK, mbg));
+  spr.drawSpot(116, 70, 8.5f, tft.alphaBlend(90, N_PINK, mbg));
+  spr.drawSpot(116, 70, 6.5f, 0xFF95);
+  spr.drawSpot(120, 67, 5.5f, tft.alphaBlend(60, N_PINK, mbg));
+  // skyline: dark blocks with lit windows, some flickering
+  for (int b = 0; b < NUM_BLD; b++) {
+    int x0 = BLD_X[b], x1 = b + 1 < NUM_BLD ? BLD_X[b + 1] : SCR_W, top = HORIZON - BLD_H[b];
+    spr.fillRect(x0, top, x1 - x0, HORIZON - top, b & 1 ? BLD : BLD2);
+    spr.drawFastHLine(x0, top, x1 - x0, tft.alphaBlend(90, N_CYAN, BLD));   // rooftop rim light
+    for (int y = top + 4; y < HORIZON - 3; y += 5)
+      for (int x = x0 + 2; x < x1 - 2; x += 4) {
+        uint32_t h = hash32(b * 97 + y * 13 + x);
+        bool lit = (h & 7) < 3;
+        if ((h & 63) == 5) lit = (t / (1500 + (h >> 8) % 2000)) % 2;   // someone flicks the light
+        if (lit) spr.fillRect(x, y, 2, 2, WIN[(h >> 4) % 3]);
+      }
+  }
+  // antenna with a blinking red light on the tallest tower
+  spr.drawFastVLine(97, HORIZON - 44 - 9, 9, BLD2);
+  if ((t / 700) % 2) spr.drawSpot(97, HORIZON - 54, 1.4f, N_RED);
+  // graffiti tags on the low walls
+  uint16_t tagBg = BLD2;
+  spr.drawWideLine(31, 112, 34, 108, 1.0f, tft.alphaBlend(200, N_LIME, tagBg));
+  spr.drawWideLine(34, 108, 36, 112, 1.0f, tft.alphaBlend(200, N_LIME, tagBg));
+  spr.drawWideLine(36, 112, 39, 108, 1.0f, tft.alphaBlend(200, N_LIME, tagBg));
+  spr.drawWideLine(107, 114, 111, 110, 1.0f, tft.alphaBlend(200, N_PINK, BLD));
+  spr.drawWideLine(111, 110, 115, 114, 1.0f, tft.alphaBlend(200, N_CYAN, BLD));
+  // signs: a pink "OPEN" box and a cyan wave
+  bool on = flickerOn(t, 7300, 0);
+  uint16_t sc = on ? N_PINK : tft.alphaBlend(90, N_PINK, BLD);
+  if (on) spr.fillSmoothRoundRect(90, 84, 34, 15, 4, tft.alphaBlend(60, N_PINK, BLD));
+  spr.fillSmoothRoundRect(92, 86, 30, 11, 3, sc);
+  spr.fillSmoothRoundRect(93, 87, 28, 9, 2, N_PANEL);
+  spr.setTextDatum(MC_DATUM);
+  spr.setTextColor(on ? tft.alphaBlend(120, WHITE, N_PINK) : sc);
+  spr.drawString("OPEN", 107, 92, 1);
+  bool on2 = flickerOn(t, 5100, 2300);
+  uint16_t wc = on2 ? N_CYAN : tft.alphaBlend(90, N_CYAN, BLD);
+  for (int i = 0; i < 4; i++) {
+    float x = 44 + i * 3.0f;
+    float y0 = 86 + (i & 1 ? 2.5f : 0), y1 = 86 + (i & 1 ? 0 : 2.5f);
+    if (on2) spr.drawWideLine(x, y0, x + 3, y1, 3.6f, tft.alphaBlend(60, N_CYAN, BLD2));
+    spr.drawWideLine(x, y0, x + 3, y1, 1.3f, wc);
+  }
+  // a neon palm on the far shore
+  const float px[4] = {8, 10, 13, 15}, py[4] = {HORIZON + 1.0f, 104, 92, 82};
+  for (int i = 0; i < 3; i++) tube(px[i], py[i], px[i + 1], py[i + 1], 1.4f, N_PINK, pal->sky1);
+  const float fx[5] = {-12, -7, 1, 8, 12}, fy[5] = {6, -4, -7, -3, 7};
+  for (int i = 0; i < 5; i++) tube(15, 82, 15 + fx[i], 82 + fy[i], 1.2f, i & 1 ? N_CYAN : N_LIME, pal->sky1);
+}
+
+static void drawSeaNeon(uint32_t t) {
+  spr.fillRectVGradient(0, HORIZON, SCR_W, SHORE - HORIZON + 6, pal->sea0, pal->sea1);
+  spr.drawFastHLine(0, HORIZON, SCR_W, tft.alphaBlend(120, N_PINK, pal->sea0));
+  // the signs, the palm and the moon reflected as wobbling dashes
+  const uint8_t rx[5] = {107, 49, 13, 116, 70};
+  const uint16_t rc[5] = {N_PINK, N_CYAN, N_LIME, 0xFF95, WIN[0]};
+  for (int i = 0; i < 5; i++) {
+    for (int y = HORIZON + 3; y < SHORE - 1; y += 3) {
+      float depth = (float)(y - HORIZON) / (SHORE - HORIZON);
+      float x = rx[i] + sinf(t * 0.003f + y * 0.7f + i) * (1.5f + depth * 2);
+      int len = 3 + (int)((1 - depth) * 4) + (i == 0 ? 3 : 0);
+      uint8_t a = (uint8_t)(170 * (1 - depth * 0.7f) * (0.6f + 0.4f * triWave(t + y * 40 + i * 300, 1800)));
+      spr.drawFastHLine((int)(x - len / 2), y, len, tft.alphaBlend(a, rc[i], pal->sea1));
+    }
+  }
+}
+
+static void drawNeonStar(float sx, float sy, float r, uint16_t c, uint16_t bg) {
+  for (int pass = 0; pass < 3; pass++) {
+    uint16_t col = pass == 0 ? tft.alphaBlend(60, c, bg) : pass == 1 ? c : N_PANEL;
+    float w0 = pass == 0 ? 3.6f : pass == 1 ? 2.4f : 1.3f, w1 = pass == 0 ? 1.8f : pass == 1 ? 0.9f : 0.1f;
+    for (int i = 0; i < 5; i++) {
+      float a = -1.5708f + i * 1.2566f + 0.2f;
+      spr.drawWedgeLine(sx, sy, sx + cosf(a) * (r - pass * 0.5f), sy + sinf(a) * (r - pass * 0.5f), w0, w1, col);
+    }
+  }
+}
+
+static void drawSandNeon(uint32_t t) {
+  float swell = sinf((t % 7000) * 6.2831853f / 7000.0f);
+  int base = SHORE + 2;
+  spr.fillRectVGradient(0, base, SCR_W, 240 - base, pal->sand0, pal->sand1);
+  for (int x = 0; x < SCR_W; x++) {          // dark water up to a glowing cyan foam line
+    float yl = base + 3 + swell * 3 + sinf(x * 0.09f + t * 0.0012f) * 1.6f;
+    int y = (int)yl;
+    spr.drawFastVLine(x, base, max(0, y - base), pal->sea1);
+    spr.drawFastVLine(x, y, 4, pal->wet);
+    spr.drawPixel(x, y, tft.alphaBlend(230, N_CYAN, pal->sea1));
+    spr.drawPixel(x, y - 1, tft.alphaBlend(90, N_CYAN, pal->sea1));
+    spr.drawPixel(x, y + 1, tft.alphaBlend(80, N_CYAN, pal->wet));
+  }
+  for (int i = 0; i < 40; i++) {             // grains catching the neon
+    uint32_t h = hash32(i + 501);
+    int x = h % SCR_W, y = base + 10 + (h >> 8) % (240 - base - 12);
+    spr.drawPixel(x, y, tft.alphaBlend(70 + (h >> 24) % 60, (h >> 20) & 1 ? N_PINK : N_CYAN, pal->sand0));
+  }
+  drawNeonStar(103, 229, 7, N_PINK, pal->sand1);
+  spr.drawSpot(26, 231, 3.6f, tft.alphaBlend(70, N_CYAN, pal->sand1));     // pebble
+  spr.drawSpot(26, 231, 2.6f, POST);
+  // the bucket as a neon outline
+  float bx = 14, by = 166;
+  spr.drawWedgeLine(bx, by - 6, bx, by + 4, 8.5f, 6.8f, tft.alphaBlend(60, N_CYAN, pal->sand0));
+  spr.drawWedgeLine(bx, by - 6, bx, by + 4, 7.2f, 5.5f, N_CYAN);
+  spr.drawWedgeLine(bx, by - 6, bx, by + 4, 6.0f, 4.3f, N_PANEL);
+  spr.drawWideLine(bx - 5, by - 6, bx + 5, by - 6, 1.4f, N_LIME);
+  spr.drawWideLine(bx - 5, by - 8, bx - 1, by - 13, 1.2f, N_CYAN);
+  spr.drawWideLine(bx - 1, by - 13, bx + 5, by - 8, 1.2f, N_CYAN);
+}
+
+static void drawBatteryNeon(uint32_t t) {
+  float x = battX + battJig, y = GROUND - BATT_H + (battJig != 0 ? fabsf(battJig) * 0.5f : 0);
+  uint16_t bg = pal->sand0;
+  if (usb) {   // a glowing pink cable into the terminal (on the left)
+    float px = x - 4, py = y + BATT_H / 2.0f;
+    tube(-2, py - 26, px - 8, py - 6, 1.6f, N_PINK, bg);
+    tube(px - 8, py - 6, px - 4, py, 1.6f, N_PINK, bg);
+    spr.fillSmoothRoundRect((int)px - 6, (int)py - 3, 5, 6, 1, POST);
+  }
+  int ix = (int)x, iy = (int)y;
+  uint16_t c = usb ? N_LIME : pct > 40 ? N_LIME : pct > 15 ? N_YELLOW : N_RED;
+  spr.fillSmoothRoundRect(ix - 4, iy - 3, BATT_W + 7, BATT_H + 6, 6, tft.alphaBlend(55, c, bg));    // glow
+  spr.fillSmoothRoundRect(ix - 4, iy + 3, 5, BATT_H - 6, 1, c);                                       // terminal
+  spr.fillSmoothRoundRect(ix - 1, iy - 1, BATT_W + 2, BATT_H + 2, 4, c);                              // tube
+  spr.fillSmoothRoundRect(ix + 1, iy + 1, BATT_W - 2, BATT_H - 2, 3, N_PANEL);
+  int lvl = usb ? (int)((BATT_W - 6) * triWave(t, 2400)) : max(2, (BATT_W - 6) * pct / 100);
+  spr.fillRect(ix + 3 + (BATT_W - 6 - lvl), iy + 3, lvl, BATT_H - 6, tft.alphaBlend(190, c, N_PANEL));
+  if (usb) {   // bolt
+    float cx = ix + BATT_W / 2.0f, cy = iy + BATT_H / 2.0f;
+    spr.fillTriangle(cx + 1, cy - 5, cx - 3, cy + 1, cx, cy + 1, N_YELLOW);
+    spr.fillTriangle(cx - 1, cy + 5, cx + 3, cy - 1, cx, cy - 1, N_YELLOW);
+  }
+  if (pct < 15 && !usb && (t / 500) % 2) spr.drawRoundRect(ix - 3, iy - 3, BATT_W + 6, BATT_H + 6, 5, N_RED);
+  char buf[8];
+  snprintf(buf, sizeof buf, usb ? "USB" : "%d%%", pct);
+  spr.setTextDatum(BC_DATUM);
+  spr.setTextColor(c);
+  spr.drawString(buf, ix + BATT_W / 2, iy - 3, 1);
+}
+
+static void drawWifiSignNeon(uint32_t t) {
+  spr.drawWideLine(SIGN_X, SIGN_Y + 18, SIGN_X, GROUND + 1, 4.0f, POST);
+  spr.drawWideLine(SIGN_X - 1, SIGN_Y + 18, SIGN_X - 1, GROUND + 1, 1.0f, tft.alphaBlend(150, N_CYAN, POST));
+  uint16_t bg = pal->sand0;
+  spr.fillSmoothRoundRect(SIGN_X - 15, SIGN_Y - 2, 30, 26, 7, tft.alphaBlend(60, N_PINK, bg));
+  spr.fillSmoothRoundRect(SIGN_X - 13, SIGN_Y, 26, 22, 5, N_PINK);
+  spr.fillSmoothRoundRect(SIGN_X - 12, SIGN_Y + 1, 24, 20, 4, N_PANEL);
+  bool on = wifiConnected();
+  int bars = !on ? 0 : wifiRssi() > -60 ? 3 : wifiRssi() > -72 ? 2 : 1;
+  float cx = SIGN_X, cy = SIGN_Y + 16;
+  for (int i = 1; i <= 3; i++) {
+    float r = 3.6f * i;
+    bool lit = i <= bars && !(on && i == bars && (t / 400) % 3 == 0);   // the outer arc pulses
+    for (int s = 0; s < 3; s++) {
+      float a0 = -2.36f + s * 0.524f, a1 = a0 + 0.524f;
+      float x0 = cx + cosf(a0) * r, y0 = cy + sinf(a0) * r, x1 = cx + cosf(a1) * r, y1 = cy + sinf(a1) * r;
+      if (lit) spr.drawWideLine(x0, y0, x1, y1, 3.4f, tft.alphaBlend(80, N_CYAN, N_PANEL));
+      spr.drawWideLine(x0, y0, x1, y1, 1.5f, lit ? N_CYAN : ARC_OFF);
+    }
+  }
+  spr.drawSpot(cx, cy, 1.6f, on ? N_CYAN : ARC_OFF);
+  if (!on) {
+    spr.drawWideLine(cx + 4, cy - 12, cx + 9, cy - 7, 1.6f, N_RED);
+    spr.drawWideLine(cx + 9, cy - 12, cx + 4, cy - 7, 1.6f, N_RED);
+  }
+}
+
+static void drawBleNeon(uint32_t t) {
+  float x = 13, y = 134 + sinf((t % 2000) * 0.00314f) * 2;
+  uint16_t bg = pal->sea1;
+  spr.drawSpot(x, y, 9.5f, tft.alphaBlend(60, BT_BLUE, bg));
+  spr.drawSpot(x, y, 7.5f, BT_BLUE);
+  spr.drawSpot(x, y, 6.3f, N_PANEL);
+  const float L[5][4] = {{0, -4.5f, 0, 4.5f}, {0, -4.5f, 2.5f, -2.2f}, {2.5f, -2.2f, -2.5f, 2.2f},
+                         {0, 4.5f, 2.5f, 2.2f}, {2.5f, 2.2f, -2.5f, -2.2f}};
+  for (auto &l : L) spr.drawWideLine(x + l[0], y + l[1], x + l[2], y + l[3], 1.2f, N_CYAN);
+  float s = 1.5f + 1.5f * triWave(t, 900);
+  spr.drawWideLine(x + 8 - s, y - 7, x + 8 + s, y - 7, 1.0f, N_PINK);
+  spr.drawWideLine(x + 8, y - 7 - s, x + 8, y - 7 + s, 1.0f, N_PINK);
+}
+
 // ---------------- rendering: scenery ----------------
-static void drawDigit(float x, float y, int d, uint16_t c) {
+static void drawDigit(float x, float y, int d, uint16_t c, float th = 4.6f) {
   static const uint8_t SEG[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
-  const float w = 17, h = 32, g = 2.6f, th = 4.6f;
+  const float w = 17, h = 32, g = 2.6f;
   float ax[6] = {x, x + w, x, x + w, x, x + w}, ay[6] = {y, y, y + h / 2, y + h / 2, y + h, y + h};
   static const uint8_t P[7][2] = {{0, 1}, {1, 3}, {3, 5}, {4, 5}, {2, 4}, {0, 2}, {2, 3}};
   for (int s = 0; s < 7; s++) {
@@ -576,23 +806,49 @@ static void drawDigit(float x, float y, int d, uint16_t c) {
   }
 }
 
+// neon tube digits: a wide faint halo, a glow, then a pale core
+static void drawClockNeon() {
+  int h = tmNow.tm_hour, m = tmNow.tm_min;
+  int dg[4] = {h / 10, h % 10, m / 10, m % 10};
+  float xs[4] = {17, 40, 74, 97};
+  const uint16_t cols[3] = {tft.alphaBlend(60, N_PINK, pal->sky0), tft.alphaBlend(150, N_PINK, pal->sky0),
+                            tft.alphaBlend(110, WHITE, N_PINK)};
+  const float th[3] = {9.0f, 6.4f, 2.6f};
+  bool colon = tmNow.tm_sec % 2 == 0;
+  for (int pass = 0; pass < 3; pass++) {
+    for (int i = 0; i < 4; i++) drawDigit(xs[i], 10, dg[i], cols[pass], th[pass]);
+    if (colon) {
+      spr.drawSpot(67, 19, th[pass] * 0.55f, cols[pass]);
+      spr.drawSpot(67, 34, th[pass] * 0.55f, cols[pass]);
+    }
+  }
+}
+
 static void drawClock(uint32_t now) {
   if (!haveTime) return;
+  if (neon) drawClockNeon();
   int h = tmNow.tm_hour, m = tmNow.tm_min;
   int dg[4] = {h / 10, h % 10, m / 10, m % 10};
   float xs[4] = {17, 40, 74, 97};
   uint16_t c = night ? 0xFF95 : WHITE, sh = night ? 0x0000 : 0x2A6E;
-  for (int pass = 0; pass < 2; pass++)
-    for (int i = 0; i < 4; i++) drawDigit(xs[i] + (pass ? 0 : 1.5f), pass ? 10 : 11.5f, dg[i], pass ? c : sh);
-  if (tmNow.tm_sec % 2 == 0) {
-    spr.drawSpot(67, 19, 2.4f, c);
-    spr.drawSpot(67, 34, 2.4f, c);
+  if (!neon) {
+    for (int pass = 0; pass < 2; pass++)
+      for (int i = 0; i < 4; i++) drawDigit(xs[i] + (pass ? 0 : 1.5f), pass ? 10 : 11.5f, dg[i], pass ? c : sh);
+    if (tmNow.tm_sec % 2 == 0) {
+      spr.drawSpot(67, 19, 2.4f, c);
+      spr.drawSpot(67, 34, 2.4f, c);
+    }
   }
   static const char *const DAYS[7] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   static const char *const MONTHS[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   char buf[20];
   snprintf(buf, sizeof buf, "%s %d %s", DAYS[tmNow.tm_wday % 7], tmNow.tm_mday, MONTHS[tmNow.tm_mon % 12]);
   spr.setTextDatum(TC_DATUM);
+  if (neon) {
+    spr.setTextColor(N_CYAN);
+    spr.drawString(buf, 67, 48, 2);
+    return;
+  }
   spr.setTextColor(night ? 0xCE9C : 0x2A6E);
   spr.drawString(buf, 68, 49, 2);
   spr.setTextColor(night ? 0xCE9C : WHITE);
@@ -600,6 +856,7 @@ static void drawClock(uint32_t now) {
 }
 
 static void drawSky(uint32_t t) {
+  if (neon) { drawSkyNeon(t); return; }
   spr.fillRectVGradient(0, 0, SCR_W, HORIZON, pal->sky0, pal->sky1);
   if (night) {
     for (int i = 0; i < 26; i++) {           // twinkling stars
@@ -629,6 +886,7 @@ static void drawSky(uint32_t t) {
 }
 
 static void drawSea(uint32_t t) {
+  if (neon) { drawSeaNeon(t); return; }
   spr.fillRectVGradient(0, HORIZON, SCR_W, SHORE - HORIZON + 6, pal->sea0, pal->sea1);
   spr.drawFastHLine(0, HORIZON, SCR_W, tft.alphaBlend(120, WHITE, pal->sea0));
   for (int i = 0; i < 7; i++) {              // glints drifting on the water
@@ -641,6 +899,7 @@ static void drawSea(uint32_t t) {
 }
 
 static void drawSand(uint32_t t) {
+  if (neon) { drawSandNeon(t); return; }
   // the shoreline breathes in and out
   float swell = sinf((t % 7000) * 6.2831853f / 7000.0f);
   int base = SHORE + 2;
@@ -683,6 +942,7 @@ static void drawSand(uint32_t t) {
 
 // ---------------- rendering: badges ----------------
 static void drawBattery(uint32_t t) {
+  if (neon) { drawBatteryNeon(t); return; }
   float x = battX + battJig, y = GROUND - BATT_H + (battJig != 0 ? fabsf(battJig) * 0.5f : 0);
   if (usb) {   // a cable plugs into the terminal (on the left)
     float px = x - 4, py = y + BATT_H / 2.0f;
@@ -713,6 +973,7 @@ static void drawBattery(uint32_t t) {
 }
 
 static void drawWifiSign(uint32_t t) {
+  if (neon) { drawWifiSignNeon(t); return; }
   spr.drawWideLine(SIGN_X, SIGN_Y + 18, SIGN_X, GROUND + 1, 4.0f, PLUM);
   spr.drawWideLine(SIGN_X, SIGN_Y + 18, SIGN_X, GROUND + 1, 2.2f, WOOD);
   spr.fillSmoothRoundRect(SIGN_X - 13, SIGN_Y, 26, 22, 5, PLUM);
@@ -738,6 +999,7 @@ static void drawWifiSign(uint32_t t) {
 
 static void drawBle(uint32_t t) {
   if (!bleConnected()) return;
+  if (neon) { drawBleNeon(t); return; }
   float x = 13, y = 134 + sinf((t % 2000) * 0.00314f) * 2;
   spr.drawSpot(x, y, 7.5f, PLUM);
   spr.drawSpot(x, y, 6.5f, BT_BLUE);
@@ -810,10 +1072,11 @@ static void drawPoo(uint32_t t) {
 
 static void drawWaveProp(const Prop &w) {
   float r = 4;
+  uint16_t c = neon ? N_CYAN : TEAL;
   for (int s = 0; s < 3; s++) {
     float a0 = -2.36f + s * 0.524f, a1 = a0 + 0.524f;
-    spr.drawWideLine(w.x + cosf(a0) * r, w.y + sinf(a0) * r, w.x + cosf(a1) * r, w.y + sinf(a1) * r, 1.8f, TEAL);
-    spr.drawWideLine(w.x + cosf(a0) * (r + 3), w.y + sinf(a0) * (r + 3), w.x + cosf(a1) * (r + 3), w.y + sinf(a1) * (r + 3), 1.8f, TEAL);
+    spr.drawWideLine(w.x + cosf(a0) * r, w.y + sinf(a0) * r, w.x + cosf(a1) * r, w.y + sinf(a1) * r, 1.8f, c);
+    spr.drawWideLine(w.x + cosf(a0) * (r + 3), w.y + sinf(a0) * (r + 3), w.x + cosf(a1) * (r + 3), w.y + sinf(a1) * (r + 3), 1.8f, c);
   }
 }
 

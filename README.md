@@ -9,19 +9,27 @@
 # 🎮 TTGO-Arcade
 
 > Retro arcade game collection for the **LilyGO TTGO T-Display V1.1** (ESP32), hosted by **Tigo**, a cheeky hermit crab who lives in your screensaver.  
-> Featuring **56 playable two-button games** (including the original **Fringe**), **10 pocket tools**, a Tamagotchi-style screensaver, a PIN lock, a WiFi clock, a Bluetooth remote for your phone, a lightweight animated UI, persistent high scores, and a modular single-file architecture for makers.
+> Featuring **56 playable two-button games** (including the original **Fringe**), **10 pocket apps**, a launcher with alphabetical Games and Apps lists, two themes (**Original** and **Neon**), over-the-air updates, a Tamagotchi-style screensaver, a PIN lock, a WiFi clock, a Bluetooth remote for your phone, persistent high scores, and a modular single-file architecture for makers.
+
+<p align="center">
+  <a href="https://buymeacoffee.com/zcnxsnw3vw"><img src="assets/support-me-sticker.gif" alt="Support me: buy Tigo a coffee" width="200"></a><br>
+  <sub>Enjoying TTGO-Arcade? <a href="https://buymeacoffee.com/zcnxsnw3vw">Chip in to Tigo's shell fund</a> ☕🐚</sub>
+</p>
 
 ---
 
 ## ✨ Features
 
 - **56 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
-- **10 Pocket Tools** — **Tigo** (feed, play with and clean the mascot), **Clock** (NTP over WiFi, time zones, digital / analog), **Remote** (Bluetooth camera shutter, music and slides for iPhone & Android), **Stopwatch** (with laps), **Flashlight** (White, Warm, Red, SOS, Strobe), **Dice** (dice, coin, D20, 1-100, yes/no), **Tally** two-player counter, **Countdown** timer with flashing alarm, **Morse** keyer/decoder and guided **Breathing**.
+- **Launcher** — The boot screen lists **Games**, **Apps**, **Settings** and **Sleep**; Games and Apps open alphabetical lists, so every game is easy to find.
+- **10 Pocket Apps** — **Breathe** (guided breathing), **Clock** (NTP over WiFi, time zones, digital / analog), **Dice** (dice, coin, D20, 1-100, yes/no), **Minute** (countdown with flashing alarm), **Morse** keyer/decoder, **Remote** (Bluetooth camera shutter, music and slides for iPhone & Android), **Tally** two-player counter, **Tigo** (feed, play with and clean the mascot), **Timer** (stopwatch with laps) and **Torch** (White, Warm, Red, SOS, Strobe).
+- **Two Themes** — **Original** (the default) and **Neon**: a glowing purple-black UI with neon pink / cyan / lime outlines, and a neon Tigo with a backwards snapback, sunglasses and a gold chain.
+- **OTA Updates** — Flash new firmware over WiFi from *Settings → OTA update*; your scores and settings stay put.
 - **Tigo's Screensaver** — An animated beach where Tigo wanders, talks in speech bubbles, eats, naps and pinches your battery badge.
 - **PIN Lock** — Optional 4-8 press L/R combination (e.g. `LLRL`), off by default.
 - **Bluetooth** — A phone remote (no app needed) and a **Companion web page** to message Tigo, send treats, share your WiFi password and sync the clock.
-- **Smooth Animated Menu** — 60 fps scrolling list with live animated game icons, mini battery/USB status badge, and fast scroll on `Hold L`.
-- **Persistent Saves (NVS)** — Remembers high scores, last played game, brightness, screensaver and sleep timers, PIN, Tigo, WiFi and Bluetooth state, and USB logging across power-offs.
+- **Smooth Animated Lists** — 60 fps scrolling with live animated game icons, mini battery/USB status badge, and fast scroll on `Hold L`.
+- **Persistent Saves (NVS)** — Remembers high scores, the last category and item you opened, theme, brightness, screensaver and sleep timers, PIN, Tigo, WiFi and Bluetooth state, and USB logging across power-offs.
 - **Power & Diagnostics** — 5 brightness levels, short or long idle timers (`5s` up to `10m`), deep sleep with single-button wake, battery voltage curve, and crash reporting.
 - **Easy to Extend** — Add a new game with one `src/<game>.cpp` file and two one-line registrations.
 
@@ -43,7 +51,33 @@
 - 📱 He **reads messages sent from your phone** (see the Companion page) and munches the treats you send.
 - 🐚 He shows off his **shells**: new ones unlock as you set high scores.
 
-Press any button to wake the board from the screensaver (then the PIN lock if it is on, then the menu).
+Press any button to wake the board from the screensaver (then the PIN lock if it is on, then the launcher).
+
+---
+
+---
+
+## 🌈 Two Tigos: Original & Neon
+
+> 🦀 *"Same crab. Better sunglasses."*
+
+<table align="center">
+  <tr>
+    <td align="center" width="50%"><img src="assets/tigo.svg" alt="Original Tigo, the coral hermit crab with a cream conch" width="230"><br><b>Original</b> <sub>(default)</sub></td>
+    <td align="center" width="50%"><img src="assets/tigo-neon-cutout.png" alt="Neon Tigo: snapback worn backwards, rainbow sunglasses, gold T chain and a graffiti shell" width="230"><br><b>Neon</b></td>
+  </tr>
+</table>
+
+Pick the look in **Settings → Theme**:
+
+- **Original** (default) — the classic look: Tigo's sunny beach, clean outlined boxes, the colours you know.
+- **Neon** — a deep purple-black background with glowing neon pink, cyan and lime outlines and accents across the launcher, the lists and the settings, and **Neon Tigo**: the same hermit crab, now wearing a purple snapback backwards (with a neon-teal button), black sunglasses with rainbow neon reflections, a gold chain with a round **T** medallion, and a graffiti-sprayed neon shell full of tags and drips.
+
+The choice is saved and survives sleep and power-off. Neon Tigo artwork: `assets/tigo-neon-logo.svg` (with the *TIGO / ti - ti - go* lettering), `assets/tigo-neon.svg` (mascot only), and transparent PNG cut-outs of the original painting (`assets/tigo-neon-cutout.png`, `assets/tigo-neon-mascot.png`).
+
+<p align="center">
+  <img src="assets/tigo-neon-logo.svg" alt="Neon Tigo logo: TIGO, ti - ti - go" width="300">
+</p>
 
 ---
 
@@ -55,11 +89,25 @@ The board has two buttons:
 - **L** — `GPIO0` (also the `BOOT` button)
 - **R** — `GPIO35` (also wakes the board from deep sleep)
 
+### 🚀 Launcher
+The boot screen is a launcher with four entries:
+
+| Entry | Opens |
+|---|---|
+| **Games** | All 56 games, in alphabetical order (`2048` and `21` first) |
+| **Apps** | The 10 pocket apps, in alphabetical order |
+| **Settings** | Brightness, theme, timers, PIN, WiFi, Bluetooth, OTA... |
+| **Sleep** | Deep sleep right away (press **R** to wake) |
+
+The launcher remembers the last category and item you opened.
+
 ### Universal Navigation
-- **Menu**: `Tap L` next item · `Hold L` fast scroll · `Tap R` open / play
+- **Launcher**: `Tap L` next entry · `Tap R` open
+- **Games / Apps lists**: `Tap L` next · `Hold L` fast scroll · `Tap R` open · `Hold R` back to the launcher. The first row of each list is **< Back**.
 - **Title Screen**: press any button to start
-- **Game Over**: `L` return to menu · `R` play again
-- **Tools**: `Hold L` returns to the menu (Torch: `Tap R`)
+- **Game Over**: `L` back to the Games list · `R` play again
+- **Apps**: `Hold L` goes back to the Apps list (Torch: `Tap R`)
+- When a game or app ends you return to the list it came from, with it still selected.
 - **Screensaver**: any button wakes it
 
 ---
@@ -68,108 +116,97 @@ The board has two buttons:
 
 > 🦀 *"Is that a high score? Beat it and I unlock a new shell!"*
 
-### ✨ Original
-| Game | Controls | Goal |
-|---|---|---|
-| **Fringe** | `Tap L / R` send a ring from the left / right corner · `Hold L + R` cancel rings | Where a left ring crosses a right ring, a spark climbs the screen; the time gap between your two taps is the aim (L first = spark to the right). Catch drifting motes (chains multiply, 3 on one spark = +1 life), avoid red mines; a fading mote costs a life |
+Sorted alphabetically, as in the **Games** list on the device.
+
+| Game | Type | Controls | Goal |
+|---|---|---|---|
+| **2048** | Puzzle | `Tap L / R` up/right · `Hold L / R` left/down | Merge matching tiles to reach 2048 and beyond |
+| **21** | Puzzle | `Tap L` hit · `Tap R` stand / next hand | Arcade Blackjack; reach the highest chip stack |
+| **Bowl** | Skill | `Tap L / R` set spot, then aim · `Hold L / R` hook | 10-pin bowling, real scoring with strikes & spares (300 max) |
+| **Bricks** | Arcade | `Hold L / R` move paddle | Breakout: clear the wall, 3 lives, faster each level |
+| **Bumper** | Arcade | `Hold L / R` steer · `L + R` turbo ram | Knock AI bots out of the circular sumo arena |
+| **Catch** | Skill | `Hold L / R` move basket | Catch coins & gems, avoid red bombs; 3 lives |
+| **Cave** | Runner | `Hold L` or `Hold R` thrust up | Fly through a narrowing cave and dodge rock pillars |
+| **Chute** | Runner | `Hold L / R` steer · `L + R` open chute (below 350 m) | Skydive through rings, dodge birds, land on the pad |
+| **Climb** | Skill | `Tap L / R` chop left/right | Climb fast without hitting branches or timing out |
+| **Code** | Puzzle | `Tap L` cycle color · `Hold L` previous peg · `Tap R` next peg / submit | Crack the hidden 4-peg color code from the clues |
+| **Columns** | Puzzle | `Tap L / R` move · `Hold L` cycle gems · `Hold R` fast drop | Match 3+ gems horizontally, vertically, or diagonally |
+| **Crossy** | Runner | `Tap L / R` forward · `Hold L / R` sideways · `L + R` back | Cross roads and rivers; keep moving before the eagle comes |
+| **Dino** | Runner | `Tap R` jump · `Hold L` duck / fast-fall | Leap cacti and duck under birds |
+| **Dodge** | Arcade | `Hold L / R` move | Survive changing bullet patterns; skim bullets for graze points; one hit |
+| **Doodle** | Runner | `Hold L / R` steer left/right | Bounce upward on platforms; cyan moves, yellow boosts |
+| **Drop 4** | Puzzle | `Tap L` next column · `Tap R` drop disc | Connect four vs the CPU; keep your win streak going |
+| **Duet** | Runner | `Hold L / R` spin orbit CCW / CW | Thread both orbiting spheres past falling blocks |
+| **Falldown** | Runner | `Hold L / R` roll left/right | Drop through gaps before rising floors crush you |
+| **Fish** | Skill | `Hold L / R` move boat · `L + R` reel in | 60 s of fishing: deep fish pay more, jellyfish steal, sharks cut the line |
+| **Flappy** | Runner | `Tap L` or `Tap R` flap | Fly through pipe gaps; ramps up after ~30 points |
+| **Fringe** | ✨ Original | `Tap L / R` send a ring from the left / right corner · `Hold L + R` cancel rings | Where a left ring crosses a right ring, a spark climbs the screen; the time gap between your two taps is the aim (L first = spark to the right). Catch drifting motes (chains multiply, 3 on one spark = +1 life), avoid red mines; a fading mote costs a life |
+| **Frog** | Runner | `Tap L / R` hop forward · `Hold L / R` hop left/right | Cross traffic, ride logs, fill all 5 lily-pad homes; 3 lives |
+| **Golf** | Skill | `Hold L / R` aim · `Hold & release L + R` putt | Sink holes before running out of shots (+3 shots/hole) |
+| **Gravity** | Runner | `Tap L / R` fall to the left/right wall | Flip between walls to dodge spikes and saws; gems +10 |
+| **Hi-Lo** | Puzzle | `Tap L` lower · `Tap R` higher | Guess the next card; streaks build up to a 5x multiplier; 3 lives |
+| **Invaders** | Arcade | `Hold L / R` move cannon (auto-fire) | Clear alien waves behind 3 destructible shields; 3 lives |
+| **Knife** | Skill | `Tap L / R` throw | Stick knives in a spinning log without hitting the others; boss every 5 stages |
+| **Lights** | Puzzle | `Tap L` next cell · `Hold L` next row · `Tap R` toggle | Lights Out 5×5: switch every light off within the move limit |
+| **Lunar** | Runner | `Hold L / R` push left/right · `L + R` main thrust | Land softly on the flat green pad before fuel runs out |
+| **Math** | Skill | `Tap L` false · `Tap R` true | Judge equations before the timer bar empties; 3 lives |
+| **Maze** | Arcade | `Tap L / R` turn left/right · `Hold L / R` U-turn | Eat all dots & power pellets, dodge ghosts; 3 lives |
+| **Memory** | Puzzle | `Tap L` next card · `Tap R` flip card | Match all 8 pairs within limited tries |
+| **Meteors** | Arcade | `Hold L / R` rotate · `L + R` thrust (auto-fire) | Blast splitting asteroids in wrap-around space; 3 lives |
+| **Mines** | Puzzle | `Tap L` cell · `Hold L` row · `Tap R` reveal · `Hold R` flag | Clear minefields without hitting a mine |
+| **Missile** | Arcade | `Hold L / R` sweep turret (auto-fires flak) | Intercept incoming missiles to protect 3 cities |
+| **Pinball** | Arcade | `Hold L / R` flippers · `Hold & release R` launch | Hit bumpers, drop targets & top lanes (up to 5x); 3 balls |
+| **Plinko** | Skill | `Tap L / R` drop ball · `Hold L / R` nudge balls | 12 balls through a peg board; the 100 slot gives a free ball |
+| **Pong 2P** | Arcade | `Tap L` P1 flip dir · `Tap R` P2 flip dir | Local 2-player Pong on one board (first to 5; best = max rally) |
+| **Pop** | Puzzle | `Tap L` next tile · `Hold L` next row · `Tap R` pop group | Pop groups of 2+ same tiles; bigger groups score much more |
+| **Race** | Runner | `Hold L / R` steer | Dodge traffic on a winding road; grass slows you down |
+| **Reversi** | Puzzle | `Tap L` next move · `Hold L` previous · `Tap R` place | Othello-style vs the CPU; score = your discs (+30 for a win) |
+| **Rhythm** | Skill | `Tap L / R` hit left/right beat | Hit falling notes on the target ring (up to 4x combo) |
+| **River** | Arcade | `Hold L / R` steer · `L + R` boost (auto-fire) | Shoot choppers & ships; fly over `F` tanks to refuel |
+| **Shooter** | Arcade | `Hold L / R` fly (auto-fire) | Destroy saucers and cruisers in growing waves; 3 lives |
+| **Simon** | Puzzle | `Tap L / R` cyan / magenta pad | Watch and repeat the growing color sequence |
+| **Ski** | Runner | `Hold L / R` carve left/right | Dodge trees and rocks; pass flag gates for +50 |
+| **Slots** | Puzzle | `Tap L` bet · `Tap R` spin / stop reel · `Hold L` cash out | 3-reel fruit machine from 100 credits; best = peak credits |
+| **Snake** | Arcade | `Tap L / R` turn left/right (relative) | Eat food, avoid walls and yourself |
+| **Stack** | Skill | `Tap L` or `Tap R` drop block | Stack cleanly; 3 perfect drops in a row widen the block |
+| **Sub** | Arcade | `Hold L` dive · `Hold R` rise · `L + R` torpedo | Grab sea-floor chests, sink sharks & mines, surface for oxygen; 3 hulls |
+| **Swing** | Runner | `Hold L / R` grapple (rope reels in) · release to fly | Swing from anchor to anchor; don't fall or get left behind |
+| **Tank** | Arcade | `Hold L / R` aim barrel · `Hold L + R` charge, release to fire | Artillery duel vs a CPU tank over hills and wind; 3 HP each |
+| **Tennis** | Arcade | `Hold L / R` move | Beat the CPU; paddle edges give sharp angles (first to 5) |
+| **Tetris** | Puzzle | `Tap L / R` move · `Hold L` rotate · `Hold R` soft drop · `L + R` hard drop | Clear lines; speeds up every 10 lines |
+| **Tron** | Arcade | `Tap L / R` turn 90° left/right | Light cycles: trap the AI in your trail; each round is faster |
+| **Whack** | Skill | `Tap L / R` whack left/right burrow | Hit moles (+10 / +30), skip red bombs; 3 lives |
 
 *Fringe — original game by Jérémy Noverraz, 2026.*
 
-### Arcade & Action
-| Game | Controls | Goal |
-|---|---|---|
-| **Pinball** | `Hold L / R` flippers · `Hold & release R` launch | Hit bumpers, drop targets & top lanes (up to 5x); 3 balls |
-| **Bricks** | `Hold L / R` move paddle | Breakout: clear the wall, 3 lives, faster each level |
-| **Tennis** | `Hold L / R` move | Beat the CPU; paddle edges give sharp angles (first to 5) |
-| **Pong 2P** | `Tap L` P1 flip dir · `Tap R` P2 flip dir | Local 2-player Pong on one board (first to 5; best = max rally) |
-| **Shooter** | `Hold L / R` fly (auto-fire) | Destroy saucers and cruisers in growing waves; 3 lives |
-| **Invaders** | `Hold L / R` move cannon (auto-fire) | Clear alien waves behind 3 destructible shields; 3 lives |
-| **Meteors** | `Hold L / R` rotate · `L + R` thrust (auto-fire) | Blast splitting asteroids in wrap-around space; 3 lives |
-| **River** | `Hold L / R` steer · `L + R` boost (auto-fire) | Shoot choppers & ships; fly over `F` tanks to refuel |
-| **Missile** | `Hold L / R` sweep turret (auto-fires flak) | Intercept incoming missiles to protect 3 cities |
-| **Bumper** | `Hold L / R` steer · `L + R` turbo ram | Knock AI bots out of the circular sumo arena |
-| **Maze** | `Tap L / R` turn left/right · `Hold L / R` U-turn | Eat all dots & power pellets, dodge ghosts; 3 lives |
-| **Snake** | `Tap L / R` turn left/right (relative) | Eat food, avoid walls and yourself |
-| **Tron** | `Tap L / R` turn 90° left/right | Light cycles: trap the AI in your trail; each round is faster |
-| **Tank** | `Hold L / R` aim barrel · `Hold L + R` charge, release to fire | Artillery duel vs a CPU tank over hills and wind; 3 HP each |
-| **Dodge** | `Hold L / R` move | Survive changing bullet patterns; skim bullets for graze points; one hit |
-| **Sub** | `Hold L` dive · `Hold R` rise · `L + R` torpedo | Grab sea-floor chests, sink sharks & mines, surface for oxygen; 3 hulls |
-
-### Endless Runners, Jumpers & Dodgers
-| Game | Controls | Goal |
-|---|---|---|
-| **Flappy** | `Tap L` or `Tap R` flap | Fly through pipe gaps; ramps up after ~30 points |
-| **Doodle** | `Hold L / R` steer left/right | Bounce upward on platforms; cyan moves, yellow boosts |
-| **Falldown** | `Hold L / R` roll left/right | Drop through gaps before rising floors crush you |
-| **Dino** | `Tap R` jump · `Hold L` duck / fast-fall | Leap cacti and duck under birds |
-| **Cave** | `Hold L` or `Hold R` thrust up | Fly through a narrowing cave and dodge rock pillars |
-| **Ski** | `Hold L / R` carve left/right | Dodge trees and rocks; pass flag gates for +50 |
-| **Race** | `Hold L / R` steer | Dodge traffic on a winding road; grass slows you down |
-| **Crossy** | `Tap L / R` forward · `Hold L / R` sideways · `L + R` back | Cross roads and rivers; keep moving before the eagle comes |
-| **Duet** | `Hold L / R` spin orbit CCW / CW | Thread both orbiting spheres past falling blocks |
-| **Lunar** | `Hold L / R` push left/right · `L + R` main thrust | Land softly on the flat green pad before fuel runs out |
-| **Frog** | `Tap L / R` hop forward · `Hold L / R` hop left/right | Cross traffic, ride logs, fill all 5 lily-pad homes; 3 lives |
-| **Gravity** | `Tap L / R` fall to the left/right wall | Flip between walls to dodge spikes and saws; gems +10 |
-| **Swing** | `Hold L / R` grapple (rope reels in) · release to fly | Swing from anchor to anchor; don't fall or get left behind |
-| **Chute** | `Hold L / R` steer · `L + R` open chute (below 350 m) | Skydive through rings, dodge birds, land on the pad |
-
-### Timing, Reflex & Skill
-| Game | Controls | Goal |
-|---|---|---|
-| **Stack** | `Tap L` or `Tap R` drop block | Stack cleanly; 3 perfect drops in a row widen the block |
-| **Rhythm** | `Tap L / R` hit left/right beat | Hit falling notes on the target ring (up to 4x combo) |
-| **Climb** | `Tap L / R` chop left/right | Climb fast without hitting branches or timing out |
-| **Catch** | `Hold L / R` move basket | Catch coins & gems, avoid red bombs; 3 lives |
-| **Whack** | `Tap L / R` whack left/right burrow | Hit moles (+10 / +30), skip red bombs; 3 lives |
-| **Golf** | `Hold L / R` aim · `Hold & release L + R` putt | Sink holes before running out of shots (+3 shots/hole) |
-| **Knife** | `Tap L / R` throw | Stick knives in a spinning log without hitting the others; boss every 5 stages |
-| **Bowl** | `Tap L / R` set spot, then aim · `Hold L / R` hook | 10-pin bowling, real scoring with strikes & spares (300 max) |
-| **Fish** | `Hold L / R` move boat · `L + R` reel in | 60 s of fishing: deep fish pay more, jellyfish steal, sharks cut the line |
-| **Plinko** | `Tap L / R` drop ball · `Hold L / R` nudge balls | 12 balls through a peg board; the 100 slot gives a free ball |
-| **Math** | `Tap L` false · `Tap R` true | Judge equations before the timer bar empties; 3 lives |
-
-### Puzzle, Memory & Cards
-| Game | Controls | Goal |
-|---|---|---|
-| **Tetris** | `Tap L / R` move · `Hold L` rotate · `Hold R` soft drop · `L + R` hard drop | Clear lines; speeds up every 10 lines |
-| **Columns** | `Tap L / R` move · `Hold L` cycle gems · `Hold R` fast drop | Match 3+ gems horizontally, vertically, or diagonally |
-| **2048** | `Tap L / R` up/right · `Hold L / R` left/down | Merge matching tiles to reach 2048 and beyond |
-| **Simon** | `Tap L / R` cyan / magenta pad | Watch and repeat the growing color sequence |
-| **Memory** | `Tap L` next card · `Tap R` flip card | Match all 8 pairs within limited tries |
-| **Mines** | `Tap L` cell · `Hold L` row · `Tap R` reveal · `Hold R` flag | Clear minefields without hitting a mine |
-| **21** | `Tap L` hit · `Tap R` stand / next hand | Arcade Blackjack; reach the highest chip stack |
-| **Hi-Lo** | `Tap L` lower · `Tap R` higher | Guess the next card; streaks build up to a 5x multiplier; 3 lives |
-| **Slots** | `Tap L` bet · `Tap R` spin / stop reel · `Hold L` cash out | 3-reel fruit machine from 100 credits; best = peak credits |
-| **Pop** | `Tap L` next tile · `Hold L` next row · `Tap R` pop group | Pop groups of 2+ same tiles; bigger groups score much more |
-| **Lights** | `Tap L` next cell · `Hold L` next row · `Tap R` toggle | Lights Out 5×5: switch every light off within the move limit |
-| **Code** | `Tap L` cycle color · `Hold L` previous peg · `Tap R` next peg / submit | Crack the hidden 4-peg color code from the clues |
-| **Reversi** | `Tap L` next move · `Hold L` previous · `Tap R` place | Othello-style vs the CPU; score = your discs (+30 for a win) |
-| **Drop 4** | `Tap L` next column · `Tap R` drop disc | Connect four vs the CPU; keep your win streak going |
-
 ---
 
-## 🛠️ Pocket Tools (10)
+## 🛠️ Pocket Apps (10)
 
 > 🦀 *"Not everything is a game. Some things are a game with a clock."*
 
-| Tool | Controls | Description |
+Sorted alphabetically, as in the **Apps** list on the device.
+
+| App | Controls | Description |
 |---|---|---|
-| **Tigo** | `Tap L` feed · `Tap R` play · `Hold R` clean · `Hold L` menu | Look after Tigo: hunger, fun and clean bars; shells unlock from your high scores |
-| **Clock** | `Tap L` next time zone · `Tap R` digital / analog · `Hold L` menu | Time from NTP over WiFi (or from your phone via Bluetooth); default zone Europe/Zurich |
-| **Remote** | `Hold L + R` switch mode (Camera / Music / Slides) · `Hold L` menu | Bluetooth remote for iPhone & Android, no app (see below) |
-| **Timer** | `Tap R` start/stop · `Tap L` lap/reset · `Hold L` menu | Precision stopwatch with up to 5 lap splits |
-| **Torch** | `Tap L` cycle mode · `Tap R` menu | Full-screen flashlight at max brightness (`White`, `Warm`, `Red`, `SOS`, `Strobe`) |
-| **Dice** | `Tap L` mode · `Tap R` roll · `Hold L` menu | 1–5 dice with total, coin flip, D20, 1–100 or yes/no (mode is remembered) |
-| **Tally** | `Tap L` A +1 · `Tap R` B +1 · `Hold R` undo · `Hold L + R` reset · `Hold L` menu | Two-player score counter, saved across sleep and power-off |
-| **Minute** | `Tap L` preset / +1 min / reset · `Tap R` start / pause · `Hold L` menu | Countdown (1–60 min presets); the screen flashes at full brightness when time is up |
-| **Morse** | `Tap L` dot · `Tap R` dash · `Hold R` delete · `Hold L` menu | Morse keyer: decodes what you tap, with a live cheat sheet of matching letters |
-| **Breathe** | `Tap L` pattern · `Tap R` start / pause · `Hold L` menu | Guided breathing (Box 4-4-4-4, Relax 4-7-8, Calm 5-5) with an animated circle |
+| **Breathe** | `Tap L` pattern · `Tap R` start / pause · `Hold L` back | Guided breathing (Box 4-4-4-4, Relax 4-7-8, Calm 5-5) with an animated circle |
+| **Clock** | `Tap L` next time zone · `Tap R` digital / analog · `Hold L` back | Time from NTP over WiFi (or from your phone via Bluetooth); default zone Europe/Zurich |
+| **Dice** | `Tap L` mode · `Tap R` roll · `Hold L` back | 1–5 dice with total, coin flip, D20, 1–100 or yes/no (mode is remembered) |
+| **Minute** | `Tap L` preset / +1 min / reset · `Tap R` start / pause · `Hold L` back | Countdown (1–60 min presets); the screen flashes at full brightness when time is up |
+| **Morse** | `Tap L` dot · `Tap R` dash · `Hold R` delete · `Hold L` back | Morse keyer: decodes what you tap, with a live cheat sheet of matching letters |
+| **Remote** | `Hold L + R` switch mode (Camera / Music / Slides) · `Hold L` back | Bluetooth remote for iPhone & Android, no app (see below) |
+| **Tally** | `Tap L` A +1 · `Tap R` B +1 · `Hold R` undo · `Hold L + R` reset · `Hold L` back | Two-player score counter, saved across sleep and power-off |
+| **Tigo** | `Tap L` feed · `Tap R` play · `Hold R` clean · `Hold L` back | Look after Tigo: hunger, fun and clean bars; shells unlock from your high scores |
+| **Timer** | `Tap R` start/stop · `Tap L` lap/reset · `Hold L` back | Precision stopwatch with up to 5 lap splits |
+| **Torch** | `Tap L` cycle mode · `Tap R` back | Full-screen flashlight at max brightness (`White`, `Warm`, `Red`, `SOS`, `Strobe`) |
 
 ### 🐚 Tigo app
-Tigo's own little Tamagotchi corner. `Tap L` **feeds** him, `Tap R` **plays** with him, `Hold R` **cleans** up after him, `Hold L` goes back to the menu. Three bars show his **hunger**, **fun** and **clean** levels; a happy Tigo is a chatty Tigo in the screensaver. Your **high scores unlock new shells** for his collection.
+Tigo's own little Tamagotchi corner. `Tap L` **feeds** him, `Tap R` **plays** with him, `Hold R` **cleans** up after him, `Hold L` goes back to the Apps list. Three bars show his **hunger**, **fun** and **clean** levels; a happy Tigo is a chatty Tigo in the screensaver. Your **high scores unlock new shells** for his collection.
 
 ### 🕰️ Clock app
-A desk clock with **digital** and **analog** faces (`Tap R` switches). The time comes from **NTP over WiFi** (switch WiFi on in Settings), or from **your phone** through the Companion page over Bluetooth. `Tap L` steps through **time zones** (default **Europe/Zurich**, `CET-1CEST,M3.5.0,M10.5.0/3`, with automatic daylight saving). `Hold L` returns to the menu.
+A desk clock with **digital** and **analog** faces (`Tap R` switches). The time comes from **NTP over WiFi** (switch WiFi on in Settings), or from **your phone** through the Companion page over Bluetooth. `Tap L` steps through **time zones** (default **Europe/Zurich**, `CET-1CEST,M3.5.0,M10.5.0/3`, with automatic daylight saving). `Hold L` returns to the Apps list.
+
+---
 
 ---
 
@@ -180,7 +217,7 @@ A desk clock with **digital** and **analog** faces (`Tap R` switches). The time 
 Switch **Bluetooth** on in Settings. The board shows up as **`TTGO-Arcade`**.
 
 ### Remote app (Bluetooth HID, no app needed)
-Pair **`TTGO-Arcade`** from your phone's Bluetooth settings (works on **iPhone and Android**, no app to install), then open **Remote** in the tools menu. `Hold L + R` switches mode, `Hold L` returns to the menu.
+Pair **`TTGO-Arcade`** from your phone's Bluetooth settings (works on **iPhone and Android**, no app to install), then open **Apps → Remote**. `Hold L + R` switches mode, `Hold L` goes back to the Apps list.
 
 | Mode | Controls | Use it for |
 |---|---|---|
@@ -203,33 +240,37 @@ Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it d
 
 ---
 
-## ⚙️ Menu, Settings & Sleep
+---
+
+## ⚙️ Settings & Sleep
 
 > 🦀 *"Settings? I only need one: more snacks."*
 
-- **Menu**: Shows a live battery/USB badge top-left (plus a WiFi badge when connected) and remembers the last played game.
+- **Launcher**: Shows a live battery/USB badge top-left (plus a WiFi badge when connected) and remembers the last category and item.
 - **Settings** (scrolling list):
 
 | Row | Values | What it does |
 |---|---|---|
 | **Brightness** | 5 levels | PWM backlight level |
+| **Theme** | `Original` / `Neon` (default `Original`) | UI look and Tigo's outfit (see *Two Tigos*) |
 | **Screensaver** | `Off`, `5s`, `8s`, `10s`, `15s`, `20s`, `30s`, `1m`, `2m`, `5m` (default `15s`) | Idle time before Tigo's screensaver |
 | **Sleep** | `5s`, `8s`, `10s`, `15s`, `20s`, `30s`, `1m`, `2m`, `5m`, `10m`, `Never` (default `1m`) | Time spent in the screensaver before deep sleep, or idle time before deep sleep when the screensaver is `Off` |
 | **PIN lock** | `Off` / `On` (default `Off`) | Ask for the PIN at boot, on wake from deep sleep and when leaving the screensaver |
 | **Change PIN** | | Set a new 4-8 press combination |
 | **WiFi >** | submenu | See below |
 | **Bluetooth** | `On` / `Off` | Remote app and Companion page |
+| **OTA update >** | screen | Receive a firmware update over WiFi (see *OTA updates*) |
 | **USB log** | `On` / `Off` | Diagnostic serial logging (`115200` baud) |
 | **Reset scores >** | submenu | Clear **All games** or any individual game's best score (with confirmation) |
-| **Back** | | Return to the menu |
+| **Back** | | Return to the launcher |
 
-- **WiFi >**: On/Off (saved; reconnects to the saved network at boot), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`), or sent from the Companion page. A WiFi badge shows in the menu while connected. WiFi drains the battery faster: switch it off when you don't need it.
+- **WiFi >**: On/Off (saved; reconnects to the saved network at boot), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`), or sent from the Companion page. A WiFi badge shows in the launcher while connected. WiFi drains the battery faster: switch it off when you don't need it.
 - **Crash indicator**: Displays an orange warning at the bottom if a previous reset/watchdog crash occurred (e.g. `! crash in Flappy`).
 
 ### 😴 Screensaver & sleep timers
 1. After the **Screensaver** idle time, Tigo's beach screensaver starts.
 2. After the **Sleep** time spent in the screensaver, the board goes into **deep sleep** (backlight and battery ADC off). With the screensaver `Off`, **Sleep** is simply the idle time before deep sleep. `Never` keeps the board awake.
-3. Any button leaves the screensaver; press **R** (`GPIO35`) to wake from deep sleep. If the PIN lock is on, it asks for the PIN first, then you are back in the menu.
+3. Any button leaves the screensaver; press **R** (`GPIO35`) to wake from deep sleep. If the PIN lock is on, it asks for the PIN first, then you are back in the launcher.
 
 ### 🔒 PIN lock
 > 🦀 *"LLRL? I won't tell anyone. Probably."*
@@ -241,54 +282,85 @@ Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it d
 
 ---
 
+---
+
+## 📡 OTA updates
+
+> 🦀 *"New firmware, no cable? I'll catch it with my claws."*
+
+1. On the board, connect to WiFi (*Settings → WiFi*), then open **Settings → OTA update**. The screen shows the hostname `ttgo-arcade.local` and the board's IP address. Uploads are **only accepted while this screen is open**; leave it and OTA is off again.
+2. On your computer, on the same network:
+
+   ```sh
+   pio run -e ota -t upload                          # uses ttgo-arcade.local
+   pio run -e ota -t upload --upload-port 192.168.1.42   # or the IP shown on screen
+   ```
+
+3. The board shows the progress, then reboots into the new firmware.
+
+Your **high scores and settings are kept**: the NVS partition stays at the same place (`0x9000`). The first build that switches to the OTA flash layout has to be flashed **over USB once** (`pio run -t upload`); after that, OTA works.
+
+---
+
 ## 🚀 Building & Flashing
 
-> 🦀 *"Flash me gently, I'm made of 3 MB of pure crab."*
+> 🦀 *"Flash me gently: over USB, or over the air."*
 
-Requires [PlatformIO](https://platformio.org/) (VS Code extension or `pio` CLI). Dependencies (`espressif32@6.9.0`, `TFT_eSPI@^2.5.43`) are fetched automatically on first build.
+Requires [PlatformIO](https://platformio.org/) (VS Code extension or `pio` CLI). Dependencies (`espressif32@6.9.0`, `TFT_eSPI@^2.5.43`, `NimBLE-Arduino`) are fetched automatically on first build.
 
 ```sh
-pio run               # Compile firmware
-pio run -t upload     # Compile and flash over USB
-pio device monitor    # Serial monitor (115200 baud, exception decoder)
+pio run                    # Compile firmware
+pio run -t upload          # Compile and flash over USB
+pio run -e ota -t upload   # Compile and flash over WiFi (open Settings > OTA update first)
+pio device monitor         # Serial monitor (115200 baud, exception decoder)
 ```
 
 > **Note:** All `TFT_eSPI` pin and driver flags live in `platformio.ini`, so no manual edits inside `.pio/libdeps/` are required.  
 > If your display appears upside down, set `SCREEN_ROTATION` to `2` in `src/common.h` (this also swaps L/R button mapping).
 
-> **Flash layout:** the firmware uses `board_build.partitions = huge_app.csv` (**3 MB app, no OTA**) because WiFi + Bluetooth need the room. Updates are done over USB. Your **high scores and settings are kept** when you upgrade from an older build, since the NVS partition does not move.
+> **Flash layout:** the firmware uses `board_build.partitions = min_spiffs.csv`: **two 1.9 MB app slots** (one runs, the other receives the OTA update) and a small SPIFFS. It replaces the old `huge_app.csv` (3 MB, no OTA). The NVS partition does not move, so your **high scores and settings are kept** when you upgrade from an older build; flash over USB once when coming from a `huge_app` build.
 
 ---
 
 ## 🧩 Project Structure
 
 ```text
-├── platformio.ini        # Board, libraries, TFT_eSPI build flags, partitions, upload config
+├── platformio.ini        # Board, libraries, TFT_eSPI build flags, partitions, USB and OTA upload envs
 ├── README.md             # Project documentation
-├── assets/               # Tigo artwork: tigo-logo.svg / .png (this header), tigo.svg
+├── assets/               # Artwork (not flashed to the board)
+│   ├── tigo-logo.svg/.png        # The header logo (Tigo on the beach)
+│   ├── tigo.svg                  # Original Tigo
+│   ├── tigo-neon-logo.svg/.png   # Neon Tigo + "TIGO / ti - ti - go" lettering
+│   ├── tigo-neon.svg             # Neon Tigo, mascot only
+│   ├── tigo-neon-cutout.png      # Neon Tigo painting, transparent cut-out (with lettering)
+│   ├── tigo-neon-mascot.png      # Neon Tigo painting, transparent cut-out (crab only)
+│   ├── tigo-neon-source.jpg      # The original neon Tigo painting
+│   └── support-me-sticker.gif    # Support sticker
 ├── docs/
 │   └── companion.html    # Web Bluetooth companion page (GitHub Pages)
 └── src/
-    ├── common.h          # Pin definitions, shared helpers, game declarations
-    ├── main.cpp          # Scrolling menu, shared HUD/Game Over UI, setup/loop
+    ├── common.h          # Pin definitions, shared helpers, theme API, game declarations
+    ├── main.cpp          # Launcher, Games / Apps lists, shared HUD/Game Over UI, setup/loop
+    ├── theme.cpp         # Original / Neon themes, themed boxes
+    ├── otaui.cpp         # OTA update screen
     ├── power.cpp         # PWM backlight, battery ADC curve, deep sleep, idle timers
     ├── diag.cpp          # USB logging & persistent crash diagnostics
     ├── settings.cpp      # Settings UI, Reset Scores submenu & confirmation modal
-    ├── tigo.cpp          # drawTigo(): the mascot, in all his poses
+    ├── tigo.cpp          # drawTigo(): the mascot, in all his poses (and outfits)
     ├── saver.cpp         # Tigo's beach screensaver
     ├── lockscr.cpp       # PIN lock: set, unlock, lockout
     ├── clock.cpp         # Time service: NTP sync, time zones
     ├── ble.cpp           # Bluetooth: HID remote + companion page service
     ├── wifi.cpp          # WiFi: reconnect, scan, connect, WPS (push button)
     ├── wifiui.cpp        # WiFi screens: status, network list, password wheel, WPS
-    ├── tigoapp.cpp, clockapp.cpp, remote.cpp                      # Tigo, Clock and Remote tools
-    ├── timer.cpp         # Stopwatch tool
-    ├── torch.cpp         # Flashlight tool
-    ├── dice.cpp, tally.cpp, minute.cpp, morse.cpp, breathe.cpp   # Other tools
+    ├── tigoapp.cpp, clockapp.cpp, remote.cpp                      # Tigo, Clock and Remote apps
+    ├── timer.cpp         # Stopwatch app
+    ├── torch.cpp         # Flashlight app
+    ├── dice.cpp, tally.cpp, minute.cpp, morse.cpp, breathe.cpp   # Other apps
     └── <game>.cpp        # One self-contained namespace per game
 ```
 
-**Adding a game:** create `src/<name>.cpp` with a `namespace <name>` exposing `begin()`, `update(now)` and `drawIcon(cx, cy, dim, t)` (copy the structure of `gravity.cpp` or `stack.cpp`), then add `DECLARE_GAME(<name>)` to `common.h` and a `GAME("Name", "<name>_hi", <name>)` line to `ITEMS[]` in `main.cpp`. The high score is kept in NVS under `<name>_hi` (15 characters max).
+**Adding a game:** create `src/<name>.cpp` with a `namespace <name>` exposing `begin()`, `update(now)` and `drawIcon(cx, cy, dim, t)` (copy the structure of `gravity.cpp` or `stack.cpp`), then add `DECLARE_GAME(<name>)` to `common.h` and a `GAME("Name", "<name>_hi", <name>)` line to `ITEMS[]` in `main.cpp`. The Games list sorts itself alphabetically, so the position in `ITEMS[]` does not matter. The high score is kept in NVS under `<name>_hi` (15 characters max).
 
 ---
 
@@ -302,7 +374,10 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
 - **Clock shows no time**: Switch WiFi on and connect to a network, or sync the clock from the Companion page.
 - **Phone can't find `TTGO-Arcade`**: Check that **Bluetooth** is `On` in Settings; on iPhone pair it from *Settings → Bluetooth*. If it was paired before a reflash, *forget* it on the phone and pair again.
 - **Companion page won't connect**: Use Chrome on Android or desktop (Web Bluetooth is not available on iPhone).
+- **OTA upload is refused or times out**: Open *Settings → OTA update* on the board first (uploads are only accepted while that screen is shown), check that WiFi is connected, and use the IP shown on screen if `ttgo-arcade.local` does not resolve (`pio run -e ota -t upload --upload-port <ip>`). The very first switch to the OTA flash layout must be flashed over USB.
 - **Debugging**: Enable `Settings → USB log` and run `pio device monitor`.
+
+---
 
 ---
 
@@ -318,7 +393,24 @@ pio device monitor    # Serial monitor (115200 baud, exception decoder)
 
 ---
 
+---
+
+## ☕ Support Tigo's shell fund
+
+> 🦀 *"Every coffee buys me a shinier shell. And you more games."*
+
+TTGO-Arcade is free and open. If it made you smile, you can support its development:
+
 <p align="center">
-  <img src="assets/tigo.svg" alt="Tigo" width="120"><br>
+  <a href="https://buymeacoffee.com/zcnxsnw3vw"><img src="assets/support-me-sticker.gif" alt="Support me on Buy Me a Coffee" width="240"></a><br>
+  <a href="https://buymeacoffee.com/zcnxsnw3vw"><b>buymeacoffee.com/zcnxsnw3vw</b></a>
+</p>
+
+---
+
+<p align="center">
+  <img src="assets/tigo.svg" alt="Original Tigo" width="120">
+  &nbsp;&nbsp;
+  <img src="assets/tigo-neon.svg" alt="Neon Tigo" width="120"><br>
   <i>🦀 "Thanks for playing! Now go set a high score, I want a new shell." 🐚</i>
 </p>

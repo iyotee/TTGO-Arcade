@@ -7,6 +7,7 @@
 //   Connecting / WPS : Tap L cancel
 
 #include "common.h"
+#include "themeui.h"
 #include <WiFi.h>
 
 namespace wifiui {
@@ -66,28 +67,22 @@ static void itemLabel(int i, char *buf, size_t n) {
 }
 
 // ---------------- helpers ----------------
-static void footer(const char *l, const char *r) {
-  spr.setTextDatum(TL_DATUM);
-  spr.setTextColor(TFT_YELLOW);
-  spr.drawString("L", 10, 222, 2);
-  spr.drawString("R", 70, 222, 2);
-  spr.setTextColor(TFT_WHITE);
-  spr.drawString(l, 22, 222, 2);
-  spr.drawString(r, 82, 222, 2);
-}
+static void footer(const char *l, const char *r) { drawThemedFooter(l, r); }
 
-static void rowBox(int y, int h, bool sel) {
-  uint16_t frame = sel ? TFT_YELLOW : TFT_DARKGREY;
-  spr.drawRoundRect(6, y, 123, h, 6, frame);
-  if (sel) spr.drawRoundRect(7, y + 1, 121, h - 2, 5, frame);
-}
+static void rowBox(int y, int h, bool sel) { drawSelBox(6, y, 123, h, 6, sel); }
+
+// theme colours (Original: the classic greys / green / cyan)
+static uint16_t dimCol() { return theme().textDim; }
+static uint16_t softCol() { return themeSoft(); }
+static uint16_t okCol() { return theme().ok; }
+static uint16_t titleCol() { return theme().neon ? theme().accent : TFT_CYAN; }
 
 static void bars(int x, int y, int rssi, uint16_t on) {   // 4 signal bars, bottom at y
   int lvl = rssi > -55 ? 4 : rssi > -67 ? 3 : rssi > -78 ? 2 : rssi > -90 ? 1 : 0;
   for (int i = 0; i < 4; i++) {
     int h = 3 + i * 2;
     if (i < lvl) spr.fillRect(x + i * 4, y - h, 3, h, on);
-    else spr.drawRect(x + i * 4, y - h, 3, h, TFT_DARKGREY);
+    else spr.drawRect(x + i * 4, y - h, 3, h, dimCol());
   }
 }
 
@@ -114,7 +109,7 @@ static void fitText(const char *s, int x, int y, int maxW, int font) {
 static void spinner(int cx, int cy, uint32_t now, uint16_t col) {
   for (int k = 0; k < 8; k++) {
     float a = k * PI / 4 + (now / 90) * PI / 4;
-    uint16_t c = tft.alphaBlend(40 + k * 27, col, TFT_BLACK);
+    uint16_t c = themeFade(40 + k * 27, col);
     spr.fillCircle(cx + (int)(cosf(a) * 12), cy + (int)(sinf(a) * 12), 2, c);
   }
 }
@@ -123,30 +118,31 @@ static void spinner(int cx, int cy, uint32_t now, uint16_t col) {
 static void renderMain() {
   char buf[40];
   spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(TFT_CYAN);
+  spr.setTextColor(titleCol());
   spr.drawString("WIFI", 67, 4, 4);
 
   // status card
-  spr.fillRoundRect(6, 30, 123, 54, 6, 0x10A2);
+  spr.fillRoundRect(6, 30, 123, 54, 6, theme().panel);
+  if (theme().neon) drawThemedBox(6, 30, 123, 54, 6, theme().frame, false);
   spr.setTextDatum(TL_DATUM);
   if (!wifiEnabled()) {
-    spr.setTextColor(TFT_DARKGREY);
+    spr.setTextColor(dimCol());
     spr.drawString("WiFi is off", 12, 36, 2);
     if (wifiSavedSsid()[0]) { spr.drawString("saved:", 12, 56, 1); fitText(wifiSavedSsid(), 12, 66, 112, 1); }
   } else if (wifiConnected()) {
-    spr.setTextColor(TFT_GREEN);
+    spr.setTextColor(okCol());
     fitText(WiFi.SSID().c_str(), 12, 34, 90, 2);
-    bars(108, 48, wifiRssi(), TFT_GREEN);
-    spr.setTextColor(TFT_WHITE);
+    bars(108, 48, wifiRssi(), okCol());
+    spr.setTextColor(theme().text);
     wifiIp(buf, sizeof buf);
     spr.drawString(buf, 12, 54, 2);
-    spr.setTextColor(TFT_LIGHTGREY);
+    spr.setTextColor(softCol());
     snprintf(buf, sizeof buf, "%d dBm", wifiRssi());
     spr.drawString(buf, 12, 72, 1);
   } else {
     spr.setTextColor(TFT_ORANGE);
     spr.drawString(wifiSavedSsid()[0] ? "Connecting..." : "Not connected", 12, 36, 2);
-    spr.setTextColor(TFT_LIGHTGREY);
+    spr.setTextColor(softCol());
     if (wifiSavedSsid()[0]) fitText(wifiSavedSsid(), 12, 56, 112, 2);
     else spr.drawString("Scan or use WPS", 12, 56, 2);
   }
@@ -157,14 +153,14 @@ static void renderMain() {
     bool sel = i == row;
     rowBox(y, 21, sel);
     spr.setTextDatum(i == M_BACK ? TC_DATUM : TL_DATUM);
-    spr.setTextColor(sel ? TFT_WHITE : TFT_DARKGREY);
+    spr.setTextColor(sel ? theme().text : dimCol());
     spr.drawString(LABEL[i], i == M_BACK ? 67 : 14, y + 3, 2);
     spr.setTextDatum(TR_DATUM);
     if (i == M_TOGGLE) {
-      spr.setTextColor(!sel ? TFT_DARKGREY : wifiEnabled() ? TFT_GREEN : TFT_LIGHTGREY);
+      spr.setTextColor(!sel ? dimCol() : wifiEnabled() ? okCol() : softCol());
       spr.drawString(wifiEnabled() ? "On" : "Off", 121, y + 3, 2);
     } else if (i == M_SCAN || i == M_WPS) {
-      spr.setTextColor(sel ? TFT_YELLOW : TFT_DARKGREY);
+      spr.setTextColor(sel ? theme().keyHint : dimCol());
       spr.drawString(">", 121, y + 3, 2);
     }
   }
@@ -175,11 +171,11 @@ static const int NET_LIST_Y = 30, NET_LIST_H = 186, ITEM_PITCH = 24;
 
 static void renderScan(uint32_t now) {
   spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(TFT_CYAN);
+  spr.setTextColor(titleCol());
   spr.drawString("NETWORKS", 67, 6, 2);
   if (scanning) {
-    spinner(67, 110, now, TFT_CYAN);
-    spr.setTextColor(TFT_LIGHTGREY);
+    spinner(67, 110, now, titleCol());
+    spr.setTextColor(softCol());
     spr.drawString("Scanning...", 67, 140, 2);
     footer("back", "");
     return;
@@ -192,11 +188,11 @@ static void renderScan(uint32_t now) {
     bool sel = i == scanIdx;
     rowBox(y, 21, sel);
     spr.setTextDatum(TL_DATUM);
-    spr.setTextColor(sel ? TFT_WHITE : TFT_LIGHTGREY);
+    spr.setTextColor(sel ? theme().text : softCol());
     if (i < nNets) {
       fitText(netSsid[i], 12, y + 3, 82, 2);
-      if (netLocked[i]) lockIcon(98, y + 6, sel ? TFT_YELLOW : TFT_DARKGREY);
-      bars(108, y + 16, netRssi[i], sel ? TFT_GREEN : TFT_DARKGREY);
+      if (netLocked[i]) lockIcon(98, y + 6, sel ? theme().keyHint : dimCol());
+      bars(108, y + 16, netRssi[i], sel ? okCol() : dimCol());
     } else {
       spr.setTextDatum(TC_DATUM);
       spr.drawString(i == nNets ? "Rescan" : "Back", 67, y + 3, 2);
@@ -205,7 +201,7 @@ static void renderScan(uint32_t now) {
   spr.resetViewport();
   if (!nNets) {
     spr.setTextDatum(TC_DATUM);
-    spr.setTextColor(TFT_DARKGREY);
+    spr.setTextColor(dimCol());
     spr.drawString("no network found", 67, 96, 2);
   }
   footer("next", scanIdx < nNets ? "join" : scanIdx == nNets ? "scan" : "back");
@@ -214,9 +210,9 @@ static void renderScan(uint32_t now) {
 static void renderPass() {
   char buf[16];
   spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(TFT_CYAN);
+  spr.setTextColor(titleCol());
   spr.drawString("PASSWORD", 67, 4, 2);
-  spr.setTextColor(TFT_LIGHTGREY);
+  spr.setTextColor(softCol());
   spr.setTextDatum(TC_DATUM);
   char nm[40];
   snprintf(nm, sizeof nm, "%s", ssid);
@@ -224,15 +220,15 @@ static void renderPass() {
   fitText(nm, 8, 22, 119, 1);
 
   // what has been typed so far (the end of it, if long), shown in clear
-  spr.fillRoundRect(4, 34, 127, 26, 4, 0x10A2);
+  spr.fillRoundRect(4, 34, 127, 26, 4, theme().panel);
   const char *shown = pass;
   while (*shown && spr.textWidth(shown, 2) > 112) shown++;
-  spr.setTextColor(TFT_WHITE);
+  spr.setTextColor(theme().text);
   spr.drawString(shown, 8, 39, 2);
   int cx = 8 + spr.textWidth(shown, 2);
-  spr.fillRect(cx + 1, 52, 7, 2, TFT_GREEN);
+  spr.fillRect(cx + 1, 52, 7, 2, okCol());
   spr.setTextDatum(TR_DATUM);
-  spr.setTextColor(TFT_DARKGREY);
+  spr.setTextColor(dimCol());
   snprintf(buf, sizeof buf, "%d", passLen);
   spr.drawString(buf, 129, 62, 1);
 
@@ -242,8 +238,8 @@ static void renderPass() {
   for (int gi = 0; gi <= NUM_GROUPS; gi++) {       // group tabs
     int x = 4 + gi * 26;
     bool on = gi == g;
-    spr.fillRoundRect(x, 76, 24, 14, 3, on ? TFT_CYAN : 0x2104);
-    spr.setTextColor(on ? TFT_BLACK : TFT_LIGHTGREY);
+    spr.fillRoundRect(x, 76, 24, 14, 3, on ? titleCol() : theme().neon ? theme().panel : 0x2104);
+    spr.setTextColor(on ? TFT_BLACK : softCol());
     spr.drawString(GROUP_NAME[gi], x + 12, 79, 1);
   }
   int n = wheelSize();
@@ -251,21 +247,21 @@ static void renderPass() {
     if (!d) continue;
     itemLabel((wheel + d + n) % n, buf, sizeof buf);
     spr.setTextDatum(MC_DATUM);
-    spr.setTextColor(abs(d) == 1 ? TFT_LIGHTGREY : TFT_DARKGREY);
+    spr.setTextColor(abs(d) == 1 ? softCol() : dimCol());
     spr.drawString(buf, 67 + d * 26 + (d > 0 ? 8 : -8), 124, 2);
   }
-  spr.fillRoundRect(46, 100, 43, 48, 6, g == NUM_GROUPS ? 0x8200 : 0x2945);
-  spr.drawRoundRect(46, 100, 43, 48, 6, TFT_YELLOW);
+  spr.fillRoundRect(46, 100, 43, 48, 6, g == NUM_GROUPS ? 0x8200 : theme().neon ? theme().panel : 0x2945);
+  drawThemedBox(46, 100, 43, 48, 6, theme().frameSel, true);
   itemLabel(wheel, buf, sizeof buf);
   spr.setTextDatum(MC_DATUM);
-  spr.setTextColor(TFT_WHITE);
+  spr.setTextColor(theme().text);
   spr.drawString(buf, 67, 125, strlen(buf) > 1 ? 2 : 4);
 
   spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(TFT_DARKGREY);
+  spr.setTextColor(dimCol());
   spr.drawString("hold L: previous", 67, 160, 1);
   spr.drawString("hold R: next group", 67, 170, 1);
-  spr.setTextColor(TFT_LIGHTGREY);
+  spr.setTextColor(softCol());
   spr.drawString("or use WPS: no typing", 67, 190, 1);
   footer("next", g == NUM_GROUPS ? ACTION_NAME[k] : "type");
 }
@@ -273,24 +269,24 @@ static void renderPass() {
 static void renderConnect(uint32_t now) {
   char buf[40];
   spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(TFT_CYAN);
+  spr.setTextColor(titleCol());
   spr.drawString(screen == WPS ? "WPS" : "CONNECT", 67, 6, 4);
-  spr.setTextColor(TFT_WHITE);
+  spr.setTextColor(theme().text);
   if (screen == WPS && wifiWpsState() == WPS_RUNNING) {
-    spinner(67, 80, now, TFT_CYAN);
+    spinner(67, 80, now, titleCol());
     spr.drawString("Press the WPS button", 67, 110, 2);
     spr.drawString("on your router", 67, 128, 2);
     uint32_t left = (WPS_TIMEOUT_MS - min(WPS_TIMEOUT_MS, now - phaseAt)) / 1000;
-    spr.setTextColor(TFT_LIGHTGREY);
+    spr.setTextColor(softCol());
     snprintf(buf, sizeof buf, "%lus", (unsigned long)left);
     spr.drawString(buf, 67, 154, 2);
     footer("cancel", "");
     return;
   }
   if (connectOk) {
-    spr.setTextColor(TFT_GREEN);
+    spr.setTextColor(okCol());
     spr.drawString("Connected!", 67, 70, 4);
-    spr.setTextColor(TFT_WHITE);
+    spr.setTextColor(theme().text);
     spr.setTextDatum(TL_DATUM);
     fitText(WiFi.SSID().c_str(), 10, 110, 115, 2);
     wifiIp(buf, sizeof buf);
@@ -301,7 +297,7 @@ static void renderConnect(uint32_t now) {
   if (connectFailed) {
     spr.setTextColor(TFT_RED);
     spr.drawString("Failed", 67, 70, 4);
-    spr.setTextColor(TFT_LIGHTGREY);
+    spr.setTextColor(softCol());
     const char *why = screen == WPS && wifiWpsState() == WPS_TIMEOUT ? "no WPS router answered"
                     : screen == WPS && wifiWpsState() == WPS_FAILED  ? "WPS was refused"
                     : wifiFailReason()[0] ? wifiFailReason() : "timed out";
@@ -309,7 +305,7 @@ static void renderConnect(uint32_t now) {
     footer("back", "retry");
     return;
   }
-  spinner(67, 80, now, TFT_CYAN);
+  spinner(67, 80, now, titleCol());
   spr.drawString("Joining", 67, 110, 2);
   spr.setTextDatum(TL_DATUM);
   fitText(screen == WPS ? "router from WPS" : ssid, 10, 130, 115, 2);
@@ -317,7 +313,7 @@ static void renderConnect(uint32_t now) {
 }
 
 static void render(uint32_t now) {
-  spr.fillSprite(TFT_BLACK);
+  spr.fillSprite(theme().bg);
   switch (screen) {
     case MAIN: renderMain(); break;
     case SCAN: renderScan(now); break;

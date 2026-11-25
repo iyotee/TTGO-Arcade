@@ -6,6 +6,8 @@
 // Set PIN:      Tap L / Tap R 4-8 times, Hold L+R : OK, then type it again
 //               Hold L (alone, 1 s) : cancel
 // Check PIN:    Tap L / Tap R, Hold L (1 s) : cancel
+//
+// Neon theme: neon-tube padlock (cyan shackle, pink body) and neon colours.
 
 #include "common.h"
 #include "lockscr.h"
@@ -26,6 +28,13 @@ static const uint32_t FRAME_MS = 33;
 // Tigo's palette
 static const uint16_t C_CORAL = 0xFB49, C_CLAW = 0xE245, C_PEACH = 0xFD91;
 static const uint16_t C_SHELL = 0xF6B4, C_TEAL = 0x2D95, C_PLUM = 0x38E7;
+static const uint16_t N_PINK = 0xF959, N_CYAN = 0x073F, N_LIME = 0x97E7;
+
+// screen colours per theme
+struct LockPal { uint16_t bgTop, title, date, dot, ring, chipL, chipR, hint; };
+static const LockPal LP_ORIG = {C_PLUM, C_CORAL, C_PEACH, C_CORAL, C_PEACH, C_CORAL, C_TEAL, TFT_LIGHTGREY};
+static const LockPal LP_NEON = {0x406A, N_PINK, N_CYAN, N_PINK, N_CYAN, N_PINK, N_CYAN, 0xBDDF};
+static const LockPal &lp() { return theme().neon ? LP_NEON : LP_ORIG; }
 
 // ---------------- stored state ----------------
 static char pin[PIN_MAX_LEN + 1] = "";
@@ -150,7 +159,7 @@ static void shake(uint32_t now, const char *m) {
 }
 
 // ---------------- rendering ----------------
-static uint16_t bgAt(int y) { return tft.alphaBlend(y * 150 / 239, C_PLUM, TFT_BLACK); }
+static uint16_t bgAt(int y) { return tft.alphaBlend(y * 150 / 239, lp().bgTop, theme().bg); }
 
 static void drawBackground(uint32_t now) {
   for (int y = 0; y < 240; y++) spr.drawFastHLine(0, y, 135, bgAt(y));
@@ -159,13 +168,51 @@ static void drawBackground(uint32_t now) {
   static const uint8_t SY[] = {8, 62, 4, 10, 58, 22, 40, 84};
   for (int i = 0; i < 8; i++) {
     int a = 50 + (int)(190 * triWave(now + i * 731, 2400 + i * 170));
-    spr.drawPixel(SX[i], SY[i], tft.alphaBlend(a, TFT_WHITE, bgAt(SY[i])));
+    uint16_t sc = !theme().neon ? TFT_WHITE : (i & 1) ? N_CYAN : N_PINK;
+    spr.drawPixel(SX[i], SY[i], tft.alphaBlend(a, sc, bgAt(SY[i])));
   }
 }
 
 // Padlock in Tigo's colours: cream shackle, coral body with the teal shell
 // band, plum outlines. top = top of the shackle, lift = shackle raised (open).
+// Neon padlock, same size: a cyan tube shackle, a dark body in a pink tube
+// with a cyan band, and a glowing pink keyhole. Dimmed during the wait.
+static void drawPadlockNeon(int cx, int top, int lift, bool dark) {
+  const int R = 19, IR = 12, BW = 64, BH = 46;
+  int sy = top + R - lift, by = top + R + 2, bx = cx - BW / 2;
+  uint16_t bg = bgAt(sy), panel = theme().panel;
+  uint16_t pink = dark ? tft.alphaBlend(110, N_PINK, bg) : N_PINK;
+  uint16_t cyan = dark ? tft.alphaBlend(110, N_CYAN, bg) : N_CYAN;
+  // shackle: a half ring and two legs, drawn as a glowing tube along the centre line
+  const float rm = (R + IR) * 0.5f;
+  const float w[4] = {10.0f, 7.0f, 4.4f, 1.2f};
+  const uint16_t c[4] = {tft.alphaBlend(45, cyan, bg), tft.alphaBlend(120, cyan, bg), cyan, tft.alphaBlend(150, TFT_WHITE, cyan)};
+  for (int p = 0; p < 4; p++) {
+    for (int s = 0; s < 12; s++) {
+      float a0 = (float)PI + s * (float)PI / 12, a1 = a0 + (float)PI / 12;
+      spr.drawWideLine(cx + cosf(a0) * rm, sy + sinf(a0) * rm, cx + cosf(a1) * rm, sy + sinf(a1) * rm, w[p], c[p]);
+    }
+    spr.drawWideLine(cx - rm, sy, cx - rm, by + 6, w[p], c[p]);
+    spr.drawWideLine(cx + rm, sy, cx + rm, by + 6, w[p], c[p]);
+  }
+  // body
+  spr.fillSmoothRoundRect(bx - 3, by - 3, BW + 6, BH + 6, 12, tft.alphaBlend(60, pink, bg), 0x00FFFFFF);
+  spr.fillSmoothRoundRect(bx - 1, by - 1, BW + 2, BH + 2, 10, pink, 0x00FFFFFF);
+  spr.fillSmoothRoundRect(bx + 1, by + 1, BW - 2, BH - 2, 8, panel, pink);
+  spr.fillRect(bx + 2, by + BH - 17, BW - 4, 6, tft.alphaBlend(70, cyan, panel));   // the shell's band
+  spr.drawFastHLine(bx + 2, by + BH - 17, BW - 4, cyan);
+  spr.drawFastHLine(bx + 2, by + BH - 12, BW - 4, cyan);
+  spr.drawFastHLine(bx + 8, by + 4, 10, tft.alphaBlend(dark ? 60 : 140, N_LIME, panel));   // a little tag
+  // keyhole
+  int kx = cx, ky = by + 14;
+  spr.fillSmoothCircle(kx, ky, 8, tft.alphaBlend(60, pink, panel), panel);
+  spr.fillSmoothCircle(kx, ky, 5, pink, 0x00FFFFFF);
+  spr.fillTriangle(kx - 3, ky + 2, kx + 3, ky + 2, kx, ky + 11, pink);
+  spr.fillRect(kx - 2, ky + 2, 5, 8, pink);
+}
+
 static void drawPadlock(int cx, int top, int lift, bool dark) {
+  if (theme().neon) { drawPadlockNeon(cx, top, lift, dark); return; }
   const int R = 19, IR = 12, BW = 64, BH = 46;
   int sy = top + R - lift;                     // shackle arc centre
   int by = top + R + 2;                        // body top
@@ -207,8 +254,8 @@ static void drawDots(int y, int count, int filled, uint16_t fillCol) {
     int x = x0 + i * pitch;
     if (i < filled) spr.fillSmoothCircle(x, y, 5, fillCol, 0x00FFFFFF);
     else {
-      spr.fillSmoothCircle(x, y, 5, C_PEACH, 0x00FFFFFF);
-      spr.fillSmoothCircle(x, y, 3, bgAt(y), C_PEACH);
+      spr.fillSmoothCircle(x, y, 5, lp().ring, 0x00FFFFFF);
+      spr.fillSmoothCircle(x, y, 3, bgAt(y), lp().ring);
     }
   }
 }
@@ -219,7 +266,7 @@ static void drawChips(int y) {
   int count = shaking ? shakeN : n;
   if (!count) {
     spr.setTextDatum(MC_DATUM);
-    spr.setTextColor(TFT_DARKGREY);
+    spr.setTextColor(theme().textDim);
     spr.drawString("- - - -", 67, y, 2);
     return;
   }
@@ -228,9 +275,9 @@ static void drawChips(int y) {
   for (int i = 0; i < count; i++) {
     int x = x0 + i * pitch;
     bool isL = shaking ? true : seq[i] == 'L';
-    uint16_t col = shaking ? TFT_RED : isL ? C_CORAL : C_TEAL;
+    uint16_t col = shaking ? TFT_RED : isL ? lp().chipL : lp().chipR;
     spr.fillSmoothRoundRect(x - 6, y - 8, 13, 16, 3, col, 0x00FFFFFF);
-    spr.setTextColor(TFT_WHITE);
+    spr.setTextColor(theme().neon ? theme().bg : TFT_WHITE);   // dark letters read better on neon chips
     if (!shaking) spr.drawString(isL ? "L" : "R", x + 1, y + 1, 2);
   }
 }
@@ -245,15 +292,15 @@ static void render(uint32_t now) {
   struct tm tmv;
   if (mode == M_LOCK && localTimeNow(&tmv)) {
     strftime(buf, sizeof buf, "%H:%M", &tmv);
-    spr.setTextColor(TFT_WHITE);
+    spr.setTextColor(theme().text);
     spr.drawString(buf, 67, 10, 4);
     strftime(buf, sizeof buf, "%a %d %b", &tmv);
-    spr.setTextColor(C_PEACH);
+    spr.setTextColor(lp().date);
     spr.drawString(buf, 67, 40, 2);
   } else {
     const char *title = mode == M_LOCK ? "TTGO-Arcade" : mode == M_CHECK ? "Current PIN"
                       : mode == M_SET1 ? "New PIN" : "Confirm PIN";
-    spr.setTextColor(C_CORAL);
+    spr.setTextColor(lp().title);
     spr.drawString(title, 67, 18, mode == M_LOCK ? 2 : 4);
   }
 
@@ -272,7 +319,7 @@ static void render(uint32_t now) {
   if (mode == M_LOCK || mode == M_CHECK) {
     int len = strlen(pin);
     if (shaking) drawDots(150, len, shakeN, TFT_RED);
-    else drawDots(150, len, okAnim ? len : n, okAnim ? TFT_GREEN : C_CORAL);
+    else drawDots(150, len, okAnim ? len : n, okAnim ? theme().ok : lp().dot);
   } else {
     drawChips(150);
   }
@@ -280,7 +327,7 @@ static void render(uint32_t now) {
   // status line
   spr.setTextDatum(TC_DATUM);
   if (okAnim) {
-    spr.setTextColor(TFT_GREEN);
+    spr.setTextColor(theme().ok);
     spr.drawString(mode == M_LOCK || mode == M_CHECK ? "Unlocked!" : "PIN saved", 67, 166, 2);
   } else if (left > 0) {
     spr.setTextColor(TFT_RED);
@@ -290,7 +337,7 @@ static void render(uint32_t now) {
     spr.setTextColor(msgCol);
     spr.drawString(msg, 67, 166, 2);
   } else {
-    spr.setTextColor(TFT_LIGHTGREY);
+    spr.setTextColor(lp().hint);
     spr.drawString(mode == M_SET1 ? "Tap L / R 4-8 times" : mode == M_SET2 ? "Type it again" : "Enter PIN", 67, 166, 2);
   }
 
@@ -299,9 +346,9 @@ static void render(uint32_t now) {
     TigoPose pose = okAnim ? TIGO_HAPPY : left > 0 ? TIGO_HIDE : (msg && (int32_t)(now - msgAt) < 1500) ? TIGO_SAD : TIGO_IDLE;
     drawTigo(67, 234, 42, pose, now, false);
   } else {
-    spr.setTextColor(TFT_LIGHTGREY);
+    spr.setTextColor(lp().hint);
     if (mode == M_SET1 || mode == M_SET2) spr.drawString("hold L+R: OK", 67, 200, 2);
-    spr.setTextColor(TFT_DARKGREY);
+    spr.setTextColor(theme().textDim);
     spr.drawString("hold L: cancel", 67, 222, 1);
   }
   spr.pushSprite(0, 0);
@@ -371,7 +418,7 @@ static Result step(uint32_t now) {
         n = 0;
         seq[0] = 0;
         mode = M_SET2;
-        say(now, "Type it again", C_PEACH);
+        say(now, "Type it again", lp().date);
       }
     } else if (mode == M_SET2) {
       shake(now, "No match, again");             // shorter than the first entry

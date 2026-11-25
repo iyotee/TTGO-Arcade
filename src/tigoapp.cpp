@@ -8,7 +8,8 @@
 //
 // Hunger / fun / clean are the same needs the screensaver uses (tigo.h), saved
 // in prefs. Shells unlock from your high scores: best score > 0 in 5, 15, 30
-// and 45 games; he always wears the fanciest one.
+// and 45 games; he always wears the fanciest one. Neon theme: the little beach
+// at night with neon-glow bars, and neon Tigo.
 
 #include "tigo.h"
 
@@ -21,9 +22,17 @@ static const int HOME_X = 58;
 static const uint32_t FRAME_MS = 33;
 
 static const uint16_t PLUM = tigo::COL_PLUM, WHITE = 0xFFFF;
-static const uint16_t SKY0 = 0x4D1D, SKY1 = 0xCF5F, SEA0 = 0x2D37, SEA1 = 0x6E99, SAND0 = 0xF6B4, SAND1 = 0xE611;
-static const uint16_t BAR_BG = 0x2945, BAR_OK = 0x4ECC, BAR_MID = 0xFE60, BAR_LOW = 0xF9C6;
-static const uint16_t FISH = 0xFD88, POO = 0x8A45, DROP = 0x7E9F, SOAP = 0xBF3F;
+static const uint16_t FISH = 0xFD88, POO = 0x8A45, SOAP = 0xBF3F;
+
+// scene colours per theme: Original (sunny beach) and Neon (the beach at night)
+struct AppPal {
+  uint16_t sky0, sky1, sea0, sea1, sand0, sand1, foam, cloud, drop, label, barBg, barOk, barMid, barLow, mark;
+};
+static const AppPal PAL_ORIG = {0x4D1D, 0xCF5F, 0x2D37, 0x6E99, 0xF6B4, 0xE611, 0xEF7D, 0xCE9C, 0x7E9F,
+                                TFT_LIGHTGREY, 0x2945, 0x4ECC, 0xFE60, 0xF9C6, WHITE};
+static const AppPal PAL_NEON = {0x0802, 0x406A, 0x0845, 0x1889, 0x30A8, 0x1844, 0x073F, 0x5913, 0x073F,
+                                0x8C5F, 0x1825, 0x97E7, 0xFF45, 0xF8C7, 0x073F};
+static const AppPal *pal = &PAL_ORIG;
 
 enum Mode { M_IDLE, M_FEED, M_PLAY, M_WASH, M_REFUSE };
 
@@ -55,14 +64,15 @@ static void setMode(Mode m, uint32_t now) {
   modeAt = now;
 }
 
-static uint16_t barCol(int v) { return v > 60 ? BAR_OK : v > 30 ? BAR_MID : BAR_LOW; }
+static uint16_t barCol(int v) { return v > 60 ? pal->barOk : v > 30 ? pal->barMid : pal->barLow; }
 
 // ---------------- rendering ----------------
 static void drawBar(int y, const char *label, int v) {
   spr.setTextDatum(TL_DATUM);
-  spr.setTextColor(TFT_LIGHTGREY);
+  spr.setTextColor(pal->label);
   spr.drawString(label, 4, y, 1);
-  spr.fillSmoothRoundRect(38, y - 1, 93, 9, 4, BAR_BG);
+  spr.fillSmoothRoundRect(38, y - 1, 93, 9, 4, pal->barBg);
+  if (theme().neon) drawThemedBox(38, y - 1, 93, 9, 4, tft.alphaBlend(150, barCol(v), pal->barBg), true);
   int w = 89 * constrain(v, 0, 100) / 100;
   if (w >= 6) spr.fillSmoothRoundRect(40, y + 1, w, 5, 2, barCol(v));
   else if (w > 0) spr.fillRect(40, y + 1, w, 5, barCol(v));
@@ -76,9 +86,14 @@ static void drawShellsRow() {
     float x = 16 + i * 25.5f, y = 58;
     if (i < shellsN) {
       tigo::drawShell(x, y, 7.0f, i);
-      if (i == tigo::shell()) spr.drawWideLine(x - 6, y + 11, x + 6, y + 11, 2.0f, WHITE);
+      if (i == tigo::shell()) spr.drawWideLine(x - 6, y + 11, x + 6, y + 11, 2.0f, pal->mark);
     } else {
-      spr.drawSpot(x, y, 8, tft.alphaBlend(90, PLUM, SKY0));
+      if (theme().neon) {   // a dim neon ring: plum would vanish in the night sky
+        spr.drawSpot(x, y, 8, theme().frame);
+        spr.drawSpot(x, y, 6.8f, theme().panel);
+      } else {
+        spr.drawSpot(x, y, 8, tft.alphaBlend(90, PLUM, pal->sky0));
+      }
       char buf[4];
       snprintf(buf, sizeof buf, "%d", tigo::SHELL_AT[i]);
       spr.setTextDatum(MC_DATUM);
@@ -96,7 +111,7 @@ static void drawPoos(uint32_t t) {
     spr.drawSpot(x, y - 7, 3.4f, PLUM); spr.drawSpot(x, y - 7, 2.6f, POO);
     spr.drawSpot(x + 0.5f, y - 10.5f, 1.9f, PLUM); spr.drawSpot(x + 0.5f, y - 10.5f, 1.2f, POO);
     float ph = fmodf(t / 900.0f + i * 0.5f, 1.0f);
-    uint16_t c = tft.alphaBlend((uint8_t)(200 * (1 - ph)), 0x8E8B, SKY1);
+    uint16_t c = tft.alphaBlend((uint8_t)(200 * (1 - ph)), 0x8E8B, pal->sky1);
     spr.drawWideLine(x - 3, y - 14 - ph * 8, x - 1.5f, y - 17 - ph * 8, 1.0f, c);
     spr.drawWideLine(x - 1.5f, y - 17 - ph * 8, x - 3, y - 20 - ph * 8, 1.0f, c);
   }
@@ -113,7 +128,7 @@ static void drawFish(float x, float y) {
 static void drawSoap(float x, float y, uint32_t t) {
   float r = 6 + sinf(t / 120.0f) * 0.6f;
   spr.drawSpot(x, y, r + 1, tft.alphaBlend(160, WHITE, SOAP));
-  spr.drawSpot(x, y, r, tft.alphaBlend(70, SOAP, SKY1));
+  spr.drawSpot(x, y, r, tft.alphaBlend(70, SOAP, pal->sky1));
   spr.drawSpot(x - r * 0.4f, y - r * 0.4f, r * 0.28f, WHITE);
   spr.drawSpot(x + r * 0.35f, y + r * 0.3f, r * 0.12f, WHITE);
 }
@@ -121,20 +136,34 @@ static void drawSoap(float x, float y, uint32_t t) {
 static void render(uint32_t now) {
   uint32_t t = now - t0;
   tigo::Needs &n = tigo::needs();
-  spr.fillSprite(TFT_BLACK);
+  const bool neon = theme().neon;
+  pal = neon ? &PAL_NEON : &PAL_ORIG;
+  spr.fillSprite(theme().bg);
 
   drawBar(4, "FOOD", n.hunger);
   drawBar(16, "FUN", n.fun);
   drawBar(28, "BATH", n.clean);
 
   // little beach
-  spr.fillRectVGradient(0, SKY_Y, 135, SHORE_Y - SKY_Y, SKY0, SKY1);
-  spr.fillRectVGradient(0, SHORE_Y, 135, 14, SEA0, SEA1);
-  spr.fillRectVGradient(0, SHORE_Y + 14, 135, 196 - SHORE_Y - 14, SAND0, SAND1);
+  spr.fillRectVGradient(0, SKY_Y, 135, SHORE_Y - SKY_Y, pal->sky0, pal->sky1);
+  if (neon) {   // night: twinkling stars, a moon and a pink glow on the horizon
+    for (int i = 0; i < 14; i++) {
+      uint32_t h = (i + 3) * 2654435761u;
+      int x = (h >> 8) % 135, y = SKY_Y + 2 + (h >> 16) % (SHORE_Y - SKY_Y - 30);
+      spr.drawPixel(x, y, tft.alphaBlend(60 + (uint8_t)(150 * triWave(t + (h >> 4) % 2000, 2200)), WHITE, pal->sky0));
+    }
+    spr.drawSpot(118, 100, 9, tft.alphaBlend(50, 0xF959, pal->sky1));
+    spr.drawSpot(118, 100, 6, 0xFF95);
+    spr.drawSpot(121, 97, 5, tft.alphaBlend(170, pal->sky1, pal->sky0));
+  }
+  spr.fillRectVGradient(0, SHORE_Y, 135, 14, pal->sea0, pal->sea1);
+  if (neon) spr.drawFastHLine(0, SHORE_Y, 135, tft.alphaBlend(130, 0xF959, pal->sea0));
+  spr.fillRectVGradient(0, SHORE_Y + 14, 135, 196 - SHORE_Y - 14, pal->sand0, pal->sand1);
   for (int x = 0; x < 135; x++) {
     int y = SHORE_Y + 14 + (int)(sinf(x * 0.09f + t * 0.0012f) * 1.5f + 1.5f);
-    spr.drawFastVLine(x, SHORE_Y + 14, y - SHORE_Y - 14 + 1, SEA1);
-    spr.drawPixel(x, y, 0xEF7D);
+    spr.drawFastVLine(x, SHORE_Y + 14, y - SHORE_Y - 14 + 1, pal->sea1);
+    spr.drawPixel(x, y, pal->foam);
+    if (neon) spr.drawPixel(x, y + 1, tft.alphaBlend(80, pal->foam, pal->sand0));
   }
   drawShellsRow();
   drawPoos(t);
@@ -171,9 +200,14 @@ static void render(uint32_t now) {
     for (int i = 0; i < 10; i++) {
       float ph = fmodf(t / 600.0f + i * 0.37f, 1.0f);
       float x = cx - 16 + (i * 37 % 32), y = cy + 6 + ph * (GROUND - 30 - cy);
-      spr.drawWedgeLine(x, y - 3, x, y, 0.4f, 1.2f, DROP);
+      spr.drawWedgeLine(x, y - 3, x, y, 0.4f, 1.2f, pal->drop);
     }
-    uint16_t cc = 0xCE9C;
+    uint16_t cc = pal->cloud;
+    if (neon) {   // a glowing outline round the cloud
+      uint16_t g = 0xF959;
+      spr.drawSpot(cx - 9, cy, 7, g); spr.drawSpot(cx, cy - 4, 9, g); spr.drawSpot(cx + 10, cy, 7, g);
+      spr.fillRect((int)cx - 9, (int)cy, 19, 7, g);
+    }
     spr.drawSpot(cx - 9, cy, 6, cc); spr.drawSpot(cx, cy - 4, 8, cc); spr.drawSpot(cx + 10, cy, 6, cc);
     spr.fillRect((int)cx - 9, (int)cy, 19, 6, cc);
     for (int i = 0; i < 5; i++) {   // foam on the shell
@@ -189,7 +223,7 @@ static void render(uint32_t now) {
   }
 
   spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(TFT_DARKGREY);
+  spr.setTextColor(theme().textDim);
   spr.drawString("hold R: bath", 67, 197, 1);
   drawToolFooter("feed", "play");
   spr.pushSprite(0, 0);
