@@ -5,7 +5,7 @@
 // and Apps open alphabetical lists:
 //   Launcher : Tap L next · Tap R open
 //   Lists    : Tap L next · Hold L fast scroll · Tap R start / open
-//              Hold R back to the launcher (or pick the "< Back" row)
+//              Hold R back to the launcher (or pick the "Back" row)
 // The launcher remembers the last category and item, and after a game or app
 // ends you are back in the list it came from. Press the board's RST button (or
 // let it go to sleep and wake it) to return to the launcher.
@@ -191,7 +191,7 @@ static View view = VIEW_LAUNCHER;
 static View startedFrom = VIEW_LAUNCHER;   // where returnToMenu() goes back to
 static int active = -1;                    // ITEMS index running, -1 = in the launcher
 static int entrySel = ENT_GAMES;
-static int listSel[2] = {1, 1};            // per list (games, apps): row 0 = "< Back"
+static int listSel[2] = {1, 1};            // per list (games, apps): row 0 = "Back"
 static int listScroll[2] = {0, 0};
 static bool dirty = true, pressedL = false, pressedR = false;
 static uint32_t lastInput = 0, lastAnim = 0, lastFrame = 0;
@@ -217,9 +217,9 @@ static void drawBold(const char *s, int x, int y) {
 static int listIdx() { return view == VIEW_APPS ? 1 : 0; }
 static int firstItem(int l) { return l ? numGames() : 0; }
 static int itemCount(int l) { return l ? ITEM_SETTINGS - numGames() : numGames(); }
-static int rowCount(int l) { return itemCount(l) + 1; }      // + "< Back"
+static int rowCount(int l) { return itemCount(l) + 1; }      // + "Back"
 static int maxScroll(int l) { return max(0, rowCount(l) * BOX_PITCH - 6 + 4 - MENU_LIST_H); }
-static int rowItem(int l, int r) { return r > 0 ? firstItem(l) + r - 1 : -1; }   // -1 = "< Back"
+static int rowItem(int l, int r) { return r > 0 ? firstItem(l) + r - 1 : -1; }   // -1 = "Back"
 
 // smallest change to the current scroll that shows the selected box completely
 static int scrollTarget(int l) {
@@ -301,9 +301,17 @@ static void drawBadges(uint32_t now, int y, bool updateBadge) {
     spr.fillRect(8, y + 2, max(1, 12 * pct / 100), 5, bcol);
   }
   if (wifiConnected()) {
-    uint16_t wc = theme().neon ? theme().accent : TFT_CYAN;
-    for (int r = 3; r <= 9; r += 3) spr.drawCircleHelper(37, y + 9, r, 1 | 2, wc);
-    spr.fillCircle(37, y + 8, 1, wc);
+    // a modern fan: a dot and three round-capped arcs, lit by signal strength
+    const Theme &th = theme();
+    uint16_t on = th.neon ? th.accent : TFT_CYAN, off = themeFade(70, on);
+    int rssi = wifiRssi();
+    int lit = rssi > -60 ? 3 : rssi > -72 ? 2 : 1;
+    const int cx = 37, cy = y + 9;
+    spr.fillSmoothCircle(cx, cy, 1, on, th.bg);
+    for (int i = 0; i < 3; i++) {
+      int r = 5 + i * 3;                          // 5, 8, 11 px, 2 px thick
+      spr.drawSmoothArc(cx, cy, r, r - 2, 135, 225, i < lit ? on : off, th.bg, true);
+    }
   }
   if (updateBadge && updates::updateAvailable()) {
     uint16_t uc = (now / 600) % 2 ? theme().ok : themeFade(150, theme().ok);   // a slow blink
@@ -482,7 +490,7 @@ static void renderList(uint32_t now) {
     // a cartridge game that is not installed is greyed
     int cs = isHeavy(g) ? cartState() : CART_READY;
     bool grey = cs == CART_NONE;
-    const char *name = g < 0 ? "< Back" : ITEMS[g].name;
+    const char *name = g < 0 ? "Back" : ITEMS[g].name;
     uint16_t nameCol = sel ? th.text : th.textDim;
     if (grey) nameCol = sel ? th.textDim : themeFade(140, th.textDim);
     spr.setTextColor(nameCol);
