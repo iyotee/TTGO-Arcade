@@ -120,6 +120,22 @@ const char *themeName(int i);
 // an outlined rounded box; in the neon theme it gets a soft glow around it
 void drawThemedBox(int x, int y, int w, int h, int r, uint16_t col, bool glow);
 
+// ---------------- cartridges (cart.cpp) ----------------
+// Heavy games (Abyx, Crypt, ...) live in a second firmware image, the "Big Games"
+// cartridge, stored in the other app slot. The launcher greys them out until the
+// cartridge is installed; starting one reboots into the cartridge, which always
+// re-arms the launcher as the next boot.
+enum CartState { CART_NONE, CART_READY, CART_OUTDATED };
+bool cartIsHeavy(const char *hiKey);  // this game lives in the cartridge
+int cartState();
+bool cartLaunch(const char *hiKey);   // reboots into the cartridge on success (does not return)
+// streaming install into the other app slot (WiFi downloader and Bluetooth use it)
+bool cartInstallBegin(uint32_t size, const uint8_t *sha256, uint32_t build, char *err, size_t errN);
+bool cartInstallWrite(const uint8_t *data, size_t n);
+bool cartInstallEnd(char *err, size_t errN);
+void cartInstallAbort();
+int cartInstallProgress();            // 0..100
+
 // ---------------- OTA (otaui.cpp, opened from Settings) ----------------
 namespace otaui { void open(); bool update(uint32_t now); }   // update(): false when leaving
 
@@ -258,6 +274,10 @@ DECLARE_GAME(tigoapp)                 // Tigo: feed / play / clean the mascot
 namespace tigoapp { void menuInfo(char *buf, size_t n); }
 DECLARE_GAME(clockapp)
 namespace clockapp { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(companionapp)            // QR code to the companion web page + Bluetooth status
+namespace companionapp { void menuInfo(char *buf, size_t n); }
+DECLARE_GAME(support)                 // QR code to the Buy Me a Coffee page
+namespace support { void menuInfo(char *buf, size_t n); }
 DECLARE_GAME(remote)                  // Bluetooth remote (camera / music / slides)
 namespace remote { void menuInfo(char *buf, size_t n); }
 DECLARE_GAME(settings)                // not a game, but uses the same entry points

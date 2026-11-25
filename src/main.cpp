@@ -239,10 +239,12 @@ static const MenuItem ITEMS[] = {
   // apps
   APP("Breathe", breathe),
   APP("Clock",   clockapp),
+  APP("Companion", companionapp),
   APP("Dice",    dice),
   APP("Minute",  minute),
   APP("Morse",   morse),
   APP("Remote",  remote),
+  APP("Support", support),
   APP("Tally",   tally),
   APP("Tigo",    tigoapp),
   APP("Timer",   timer),
