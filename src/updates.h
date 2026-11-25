@@ -38,7 +38,9 @@ enum Phase { PH_IDLE, PH_CONNECT, PH_DOWNLOAD, PH_VERIFY, PH_DONE, PH_FAILED };
 // false (err filled) when it can't start: busy, no WiFi, not enough memory.
 // A download may stop Bluetooth for its duration (TLS needs the heap); the
 // setting is restored afterwards.
-bool start(int job, char *err, size_t errN);
+// user = asked for on screen (may pause Bluetooth / use an 8-bit screen buffer);
+// the hourly background check passes false and simply waits for a better time
+bool start(int job, char *err, size_t errN, bool user = true);
 bool busy();
 int job();                            // the current / last job
 int phase();                          // PH_DONE / PH_FAILED once service() wrapped it up

@@ -354,6 +354,14 @@ void menuInfo(char *buf, size_t n) {
   else snprintf(buf, n, "Battery %d%%", batteryPercent(v));
 }
 
+static void prevRow() {
+  row = (row + NUM_ROWS - 1) % NUM_ROWS;
+  mainScroll = mainScrollTarget();
+  dirty = true;
+}
+
+static BothHold upHold;                                  // Hold L + R: move up
+
 static void nextRow() {
   row = (row + 1) % NUM_ROWS;
   mainScroll = mainScrollTarget();
@@ -398,7 +406,8 @@ void update(uint32_t now) {
   if (eR == 1) pressedR = true;
 
   if (screen == SCR_MAIN) {
-    if (bL.stable && pressedL && (int32_t)(now - bL.nextRepeat) >= 0) {
+    if ((pressedL || pressedR) && bothHoldStep(upHold, now)) prevRow();
+    if (bL.stable && !bR.stable && pressedL && (int32_t)(now - bL.nextRepeat) >= 0) {
       bL.nextRepeat = now + 150;
       bL.consumed = true;
       nextRow();
@@ -407,6 +416,7 @@ void update(uint32_t now) {
       pressedL = false;
       if (!bL.consumed) nextRow();
     }
+    if (eR == 2 && pressedR && bR.consumed) pressedR = false;    // the release of a Hold L + R
     if (eR == 2 && pressedR) {
       pressedR = false;
       if (row == ROW_BACK) { returnToMenu(); return; }
@@ -449,7 +459,12 @@ void update(uint32_t now) {
     }
   } else if (screen == SCR_RESET) {
     int total = resetTotal();
-    if (bL.stable && pressedL && (int32_t)(now - bL.nextRepeat) >= 0) {
+    if ((pressedL || pressedR) && bothHoldStep(upHold, now)) {
+      resetIdx = (resetIdx + total - 1) % total;
+      resetScroll = resetScrollTarget();
+      dirty = true;
+    }
+    if (bL.stable && !bR.stable && pressedL && (int32_t)(now - bL.nextRepeat) >= 0) {
       bL.nextRepeat = now + 150;
       bL.consumed = true;
       resetIdx = (resetIdx + 1) % total;
@@ -464,6 +479,7 @@ void update(uint32_t now) {
         dirty = true;
       }
     }
+    if (eR == 2 && pressedR && bR.consumed) pressedR = false;
     if (eR == 2 && pressedR) {
       pressedR = false;
       if (resetIdx == total - 1) {

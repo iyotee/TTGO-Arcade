@@ -182,6 +182,11 @@ void drawGameOverBox(const char *title, uint32_t score, uint32_t best, bool newH
 // that started on the screen.
 enum EndChoice { END_NONE, END_PLAY, END_MENU };
 EndChoice startOrEnd(bool gameOver, int eL, int eR, bool &armed);
+// Lists: Hold L + R steps UP (backwards), repeating while held. Returns 1 when
+// a step is due now. Both presses are marked consumed so their releases do
+// nothing; screens must ignore a release whose button is consumed.
+struct BothHold { bool on; uint32_t next; BothHold() : on(false), next(0) {} };
+int bothHoldStep(BothHold &h, uint32_t now);
 // Tools: "L <l>   R <r>" at the bottom, with a "hold L: menu" hint above it
 void drawToolFooter(const char *l, const char *r);
 static const uint32_t TOOL_HOLD_MS = 600;   // hold L this long to leave a tool

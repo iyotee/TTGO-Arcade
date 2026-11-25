@@ -395,6 +395,8 @@ void open() {
   dirty = true;
 }
 
+static BothHold upHold;                            // Hold L + R: move up a list
+
 // one loop pass; returns false when the user leaves back to Settings
 bool update(uint32_t now) {
   int eL = updateBtn(bL, now);
@@ -409,6 +411,7 @@ bool update(uint32_t now) {
 
   switch (screen) {
     case MAIN:
+      if ((pressedL || pressedR) && bothHoldStep(upHold, now)) { row = (row + NUM_MAIN - 1) % NUM_MAIN; dirty = true; }
       if (tapL) { row = (row + 1) % NUM_MAIN; dirty = true; }
       if (tapR) {
         if (row == M_BACK) return false;
@@ -428,7 +431,8 @@ bool update(uint32_t now) {
         break;
       }
       int total = nNets + 2;
-      if (pressedL && bL.stable && (int32_t)(now - bL.nextRepeat) >= 0) {
+      if ((pressedL || pressedR) && bothHoldStep(upHold, now)) { scanIdx = (scanIdx + total - 1) % total; dirty = true; }
+      if (pressedL && bL.stable && !bR.stable && (int32_t)(now - bL.nextRepeat) >= 0) {
         bL.nextRepeat = now + 150;
         bL.consumed = true;
         scanIdx = (scanIdx + 1) % total;

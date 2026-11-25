@@ -171,3 +171,16 @@ void bootHardware() {
 
   prefs.begin("tetris", false);
 }
+
+int bothHoldStep(BothHold &h, uint32_t now) {
+  if (!(bL.stable && bR.stable)) { h.on = false; return 0; }
+  bL.consumed = bR.consumed = true;
+  if (!h.on) {                                   // a short wait: a sloppy double tap is not a step
+    h.on = true;
+    h.next = now + 250;
+    return 0;
+  }
+  if ((int32_t)(now - h.next) < 0) return 0;
+  h.next = now + 160;
+  return 1;
+}

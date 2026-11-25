@@ -547,6 +547,15 @@ static void nextEntry(uint32_t now) {
   dirty = true;
 }
 
+static void prevEntry(uint32_t now) {
+  if (view == VIEW_LAUNCHER) entrySel = (entrySel + NUM_ENTRIES - 1) % NUM_ENTRIES;
+  else listSel[listIdx()] = (listSel[listIdx()] + rowCount(listIdx()) - 1) % rowCount(listIdx());
+  selectedAt = now;
+  dirty = true;
+}
+
+static BothHold upHold;                      // Hold L + R: move up the list
+
 static void openSelected(uint32_t now) {
   if (view == VIEW_LAUNCHER) {
     if (entrySel == ENT_GAMES) showView(VIEW_GAMES, now);
@@ -584,7 +593,8 @@ void update(uint32_t now) {
   // holding L auto-repeats to scroll faster through the list
   if (eL == 1) { pressedL = true; bL.nextRepeat = now + 380; }
   if (eR == 1) pressedR = true;
-  if (bL.stable && pressedL && (int32_t)(now - bL.nextRepeat) >= 0) {
+  if ((pressedL || pressedR) && bothHoldStep(upHold, now)) prevEntry(now);
+  if (bL.stable && !bR.stable && pressedL && (int32_t)(now - bL.nextRepeat) >= 0) {
     bL.nextRepeat = now + 150;
     bL.consumed = true;
     nextEntry(now);
@@ -595,13 +605,14 @@ void update(uint32_t now) {
   }
   // hold R in a list: back to the launcher (showView drops the press, so its
   // release does nothing)
-  if (view != VIEW_LAUNCHER && bR.stable && pressedR && (int32_t)(now - bR.t0) >= (int32_t)TOOL_HOLD_MS) {
+  if (view != VIEW_LAUNCHER && bR.stable && !bL.stable && !bR.consumed && pressedR &&
+      (int32_t)(now - bR.t0) >= (int32_t)TOOL_HOLD_MS) {
     bR.consumed = true;
     showView(VIEW_LAUNCHER, now);
   }
   if (eR == 2 && pressedR) {
     pressedR = false;
-    openSelected(now);
+    if (!bR.consumed) openSelected(now);
     if (active >= 0) return;                 // the item drew its own screen
   }
 

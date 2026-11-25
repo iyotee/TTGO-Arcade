@@ -291,7 +291,36 @@ static void jobTask(void *arg) {
 static bool heapOk() { return ESP.getFreeHeap() >= NEED_FREE_HEAP && ESP.getMaxAllocHeap() >= NEED_BLOCK; }
 
 // ---------------- main-loop side ----------------
+// The full-screen sprite is 64.8 KB at 16 bits. A download the user asked for
+// may switch it to 8 bits (32 KB back) when TLS would not fit otherwise; the
+// update screens still draw fine, just with fewer colours.
+static bool spriteSmall = false;
+
+static void recreateSprite(uint8_t depth) {
+  int w = spr.width(), h = spr.height();
+  spr.deleteSprite();
+  spr.setColorDepth(depth);
+  if (!spr.createSprite(w, h) && depth == 16) {    // no room for 16 bits back: stay at 8
+    spr.setColorDepth(8);
+    spr.createSprite(w, h);
+  }
+}
+
+static void shrinkSprite() {
+  if (spriteSmall || spr.getColorDepth() != 16) return;
+  recreateSprite(8);
+  spriteSmall = true;
+  dbg("upd: screen buffer at 8 bits for the download, heap %u\n", ESP.getFreeHeap());
+}
+
+static void restoreSprite() {
+  if (!spriteSmall) return;
+  spriteSmall = false;
+  recreateSprite(16);
+}
+
 static void restoreRadios() {
+  restoreSprite();
   if (sleepWasOff && wifiConnected()) WiFi.setSleep(true);
   sleepWasOff = false;
   if (bleWasOn) setBleEnabled(true);                 // put the saved setting back
@@ -309,12 +338,12 @@ static void takeOver(const Manifest &m) {
   dbg("upd: manifest launcher %u (this %u), cartridge %u\n", (unsigned)latestFw, (unsigned)FW_BUILD, (unsigned)latestCart);
 }
 
-bool start(int j, char *err, size_t n) {
+bool start(int j, char *err, size_t n, bool user) {
   if (running) { snprintf(err, n, "busy"); return false; }
   if (!wifiConnected()) { snprintf(err, n, "no WiFi"); return false; }
   if (!heapOk()) {
-    // only a download asked for by the user may stop Bluetooth for a while
-    if (j == JOB_CHECK) { snprintf(err, n, "low memory"); return false; }
+    // only something the user asked for may stop Bluetooth or shrink the screen for a while
+    if (!user) { snprintf(err, n, "low memory"); return false; }
     if (bleRunning()) {
       bleWasOn = bleEnabled();
       if (bleWasOn) setBleEnabled(false);
@@ -322,9 +351,11 @@ bool start(int j, char *err, size_t n) {
       delay(100);
       dbg("upd: Bluetooth paused for the download, heap %u\n", ESP.getFreeHeap());
     }
+    if (!heapOk()) shrinkSprite();
     if (!heapOk()) {
+      uint32_t freeK = ESP.getFreeHeap() / 1024, blockK = ESP.getMaxAllocHeap() / 1024;
       restoreRadios();
-      snprintf(err, n, "not enough memory");
+      snprintf(err, n, "low memory %uK/%uK", (unsigned)freeK, (unsigned)blockK);
       return false;
     }
   }
@@ -370,7 +401,7 @@ void service(uint32_t now) {
   }
   if (!autoOn || running || (int32_t)(now - nextCheckAt) < 0) return;
   char err[24];
-  if (!start(JOB_CHECK, err, sizeof err)) nextCheckAt = now + RETRY_MS;
+  if (!start(JOB_CHECK, err, sizeof err, false)) nextCheckAt = now + RETRY_MS;
   else nextCheckAt = now + CHECK_EVERY_MS;           // reset again when it ends
 }
 

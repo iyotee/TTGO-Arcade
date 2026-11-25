@@ -95,11 +95,15 @@ The boot screen is a launcher with four entries:
 | Entry | Opens |
 |---|---|
 | **Games** | All 59 games, in alphabetical order (`2048` and `21` first); the Big Games (Abyx, Crypt) show greyed with **Download** until their cartridge is installed |
-| **Apps** | The 10 pocket apps, in alphabetical order |
-| **Settings** | Brightness, theme, timers, PIN, WiFi, Bluetooth, OTA... |
+| **Apps** | The 12 pocket apps, in alphabetical order |
+| **Settings** | Brightness, theme, timers, PIN, WiFi, Updates, OTA, Bluetooth, Crash report... |
 | **Sleep** | Deep sleep right away (press **R** to wake) |
 
 The launcher remembers the last category and item you opened.
+
+**In every list** (launcher, Games, Apps, Settings, Reset scores, WiFi networks): `Tap L` next · `Hold L` scroll down fast · **`Hold L + R` scroll up** (repeats while held) · `Tap R` open · `Hold R` back to the launcher (Games / Apps lists).
+
+**Crash report** (Settings): if the board ever crashes it keeps the faulting address and backtrace; the report shows as a QR code to scan and send, and each CI build keeps its `firmware.elf` (artifact `elf-<build>`) to decode it.
 
 ### Universal Navigation
 - **Launcher**: `Tap L` next entry · `Tap R` open
