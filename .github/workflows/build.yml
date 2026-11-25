@@ -1,0 +1,105 @@
+# Builds both firmwares on every push to main and publishes them on GitHub
+# Pages next to the companion page (docs/*):
+#   https://<owner>.github.io/<repo>/fw/manifest.json   what the launcher checks
+#   .../fw/firmware.bin    the launcher (env ttgo-t-display)
+#   .../fw/cartridge.bin   the "Big Games" cartridge (env cartridge)
+# FW_BUILD is the workflow run number: the board compares it with its own
+# (0 = a local dev build, never offered an update).
+# One-time setup: Settings > Pages > Source = "GitHub Actions".
+name: Build and publish firmware
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# one Pages deployment at a time; a newer push waits instead of cancelling a deploy
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FW_BUILD: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build the launcher
+        env:
+          PLATFORMIO_BUILD_FLAGS: -DFW_BUILD=${{ github.run_number }}
+        run: pio run -e ttgo-t-display
+
+      - name: Build the Big Games cartridge
+        env:
+          PLATFORMIO_BUILD_FLAGS: -DFW_BUILD=${{ github.run_number }}
+        run: pio run -e cartridge
+
+      - name: Assemble the site and the manifest
+        run: |
+          mkdir -p site/fw
+          cp -r docs/. site/
+          cp .pio/build/ttgo-t-display/firmware.bin site/fw/firmware.bin
+          cp .pio/build/cartridge/firmware.bin site/fw/cartridge.bin
+          python3 - <<'EOF'
+          import hashlib, json, os
+          owner, repo = os.environ["GITHUB_REPOSITORY"].split("/")
+          base = "https://%s.github.io/%s/fw/" % (owner.lower(), repo)
+          build = int(os.environ["FW_BUILD"])
+          def image(name):
+              data = open("site/fw/" + name, "rb").read()
+              return {"build": build, "size": len(data),
+                      "sha256": hashlib.sha256(data).hexdigest(), "url": base + name}
+          manifest = {
+              "launcher": image("firmware.bin"),
+              "cartridges": [dict(id="big", name="Big Games", games=["abyx_hi", "crypt_hi"],
+                                  **image("cartridge.bin"))],
+          }
+          with open("site/fw/manifest.json", "w") as f:
+              json.dump(manifest, f, indent=1)
+          print(json.dumps(manifest, indent=1))
+          EOF
+          # the launcher refuses images that do not fit its 1.9 MB app slot (min_spiffs.csv)
+          for f in site/fw/*.bin; do
+            s=$(stat -c %s "$f")
+            echo "$f: $s bytes"
+            test "$s" -le 1966080
+          done
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

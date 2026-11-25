@@ -1,8 +1,9 @@
 // Settings screen: battery level (read only) above a scrolling list of
 // brightness, theme (Original / Neon, theme.cpp), screensaver delay, sleep
-// delay, PIN lock (lockscr.cpp), WiFi (wifiui.cpp), OTA update (otaui.cpp),
-// Bluetooth, USB logging and the reset high scores submenu; the last recorded
-// crash shows under the list.
+// delay, PIN lock (lockscr.cpp), WiFi (wifiui.cpp), Updates (updates.cpp:
+// check / install from GitHub, "New" when a newer launcher is out), OTA
+// update (otaui.cpp, upload from the PC), Bluetooth, USB logging and the reset
+// high scores submenu; the last recorded crash shows under the list.
 //
 //   Tap L : next row (hold to auto-repeat)
 //   Tap R : change / toggle / open / back
@@ -11,14 +12,15 @@
 #include "power.h"
 #include "lockscr.h"
 #include "themeui.h"
+#include "updates.h"
 
 namespace wifiui { void open(); bool update(uint32_t now); }
 
 namespace settings {
 
-enum Row { ROW_BRIGHTNESS, ROW_THEME, ROW_SAVER, ROW_SLEEP, ROW_PIN, ROW_CHANGEPIN, ROW_WIFI, ROW_OTA, ROW_BLE,
-           ROW_USBLOG, ROW_RESET, ROW_BACK, NUM_ROWS };
-enum Screen { SCR_MAIN, SCR_RESET, SCR_CONFIRM, SCR_WIFI, SCR_OTA };
+enum Row { ROW_BRIGHTNESS, ROW_THEME, ROW_SAVER, ROW_SLEEP, ROW_PIN, ROW_CHANGEPIN, ROW_WIFI, ROW_UPDATES, ROW_OTA,
+           ROW_BLE, ROW_USBLOG, ROW_RESET, ROW_BACK, NUM_ROWS };
+enum Screen { SCR_MAIN, SCR_RESET, SCR_CONFIRM, SCR_WIFI, SCR_OTA, SCR_UPDATES };
 
 static Screen screen = SCR_MAIN;
 static int row = ROW_BRIGHTNESS;
@@ -126,6 +128,10 @@ static void renderRow(int r, int y) {
       drawValueRow(y, sel, "WiFi", wifiConnected() ? "On  >" : wifiEnabled() ? "...  >" : "Off  >",
                    wifiConnected() ? theme().ok : wifiEnabled() ? TFT_ORANGE : softCol());
       break;
+    case ROW_UPDATES:                                   // "New" once a newer launcher is known
+      drawValueRow(y, sel, "Updates", updates::updateAvailable() ? "New  >" : ">",
+                   updates::updateAvailable() ? theme().ok : wifiConnected() ? theme().keyHint : softCol());
+      break;
     case ROW_OTA:                                       // needs WiFi: brighter once connected
       drawValueRow(y, sel, "OTA update", ">", wifiConnected() ? theme().keyHint : softCol());
       break;
@@ -217,7 +223,7 @@ static void renderMain() {
                   : row == ROW_PIN                    ? (lockscr::enabled() ? "turn off" : "turn on")
                   : row == ROW_CHANGEPIN              ? (lockscr::enabled() ? "change" : "-")
                   : row == ROW_USBLOG || row == ROW_BLE ? "toggle"
-                  : row == ROW_RESET || row == ROW_WIFI || row == ROW_OTA ? "open"
+                  : row == ROW_RESET || row == ROW_WIFI || row == ROW_OTA || row == ROW_UPDATES ? "open"
                                                         : "back";
   drawThemedFooter("next", act);
 }
@@ -336,7 +342,8 @@ void menuInfo(char *buf, size_t n) {
   static int v = 0;
   static uint32_t readAt = 0;
   if (!readAt || millis() - readAt > 5000) { v = batteryMilliVolts(); readAt = millis(); }
-  if (onUsbPower(v)) snprintf(buf, n, "USB power");
+  if (updates::updateAvailable()) snprintf(buf, n, "Update available");
+  else if (onUsbPower(v)) snprintf(buf, n, "USB power");
   else snprintf(buf, n, "Battery %d%%", batteryPercent(v));
 }
 
@@ -364,8 +371,9 @@ void begin() {
 }
 
 void update(uint32_t now) {
-  if (screen == SCR_WIFI || screen == SCR_OTA) {        // the WiFi / OTA screens run themselves
-    if (!(screen == SCR_WIFI ? wifiui::update(now) : otaui::update(now))) {
+  if (screen == SCR_WIFI || screen == SCR_OTA || screen == SCR_UPDATES) {   // these screens run themselves
+    bool stay = screen == SCR_WIFI ? wifiui::update(now) : screen == SCR_OTA ? otaui::update(now) : updui::update(now);
+    if (!stay) {
       screen = SCR_MAIN;
       pressedL = pressedR = false;
       lastInput = now;
@@ -415,6 +423,10 @@ void update(uint32_t now) {
       } else if (row == ROW_OTA) {
         screen = SCR_OTA;
         otaui::open();
+        return;
+      } else if (row == ROW_UPDATES) {
+        screen = SCR_UPDATES;
+        updui::open();
         return;
       } else {
         screen = SCR_RESET;

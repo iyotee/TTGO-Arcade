@@ -10,6 +10,12 @@
 // ends you are back in the list it came from. Press the board's RST button (or
 // let it go to sleep and wake it) to return to the launcher.
 //
+// Abyx and Crypt live in the "Big Games" cartridge (cart.h): greyed in the
+// Games list with "Download" until it is installed in the other app slot,
+// then starting one reboots into the cartridge, which comes back here.
+// Updates (updates.h): an hourly manifest check while WiFi is connected; a
+// newer launcher shows an arrow badge in the launcher header.
+//
 // High scores and settings are stored in NVS (survive power-off).
 // On menu / title / game-over screens, after the screensaver delay of
 // inactivity (Settings) Tigo's screensaver starts, and after the sleep delay
@@ -19,154 +25,27 @@
 #include "common.h"
 #include "lockscr.h"
 #include "themeui.h"
-
-TFT_eSPI tft;
-TFT_eSprite spr(&tft);
-Preferences prefs;
-Btn bL{PIN_LEFT}, bR{PIN_RIGHT};
-
-int updateBtn(Btn &b, uint32_t now) {
-  bool r = digitalRead(b.pin) == LOW;
-  if (r != b.raw) { b.raw = r; b.rawT = now; }
-  if (r != b.stable && now - b.rawT >= DEBOUNCE_MS) {
-    b.stable = r;
-    if (r) { b.t0 = now; b.held = false; b.consumed = false; return 1; }
-    return 2;
-  }
-  return 0;
-}
-
-void drawCell(int px, int py, int sz, uint16_t col) {
-  spr.fillRect(px, py, sz - 1, sz - 1, col);
-  uint16_t lt = tft.alphaBlend(120, TFT_WHITE, col);
-  uint16_t dk = tft.alphaBlend(110, TFT_BLACK, col);
-  spr.drawFastHLine(px, py, sz - 1, lt);
-  spr.drawFastVLine(px, py, sz - 1, lt);
-  spr.drawFastHLine(px, py + sz - 2, sz - 1, dk);
-  spr.drawFastVLine(px + sz - 2, py, sz - 1, dk);
-}
-
-float triWave(uint32_t t, uint32_t period) {
-  float f = (float)(t % period) / period;
-  return f < 0.5f ? 2 * f : 2 - 2 * f;
-}
-
-// ---------------- shared screens (themed) ----------------
-void drawScoreHeader(uint32_t score, uint32_t best) {
-  char buf[32];
-  const Theme &th = theme();
-  spr.fillRect(0, 0, 135, HEADER_H, th.bg);
-  if (th.neon) spr.drawFastHLine(0, HEADER_H - 2, 135, themeFade(110, th.frameSel));   // neon underline
-  spr.setTextDatum(TL_DATUM);
-  spr.setTextColor(th.text);
-  snprintf(buf, sizeof buf, "Score %lu", (unsigned long)score);
-  spr.drawString(buf, 2, 2, 2);
-  spr.setTextColor(th.neon ? th.accent : TFT_LIGHTGREY);
-  snprintf(buf, sizeof buf, "Best %lu", (unsigned long)best);
-  spr.drawString(buf, 2, 24, 1);
-}
-
-void drawGameOverBox(const char *title, uint32_t score, uint32_t best, bool newHigh) {
-  char buf[32];
-  const Theme &th = theme();
-  uint16_t edge = th.neon ? th.frameSel : TFT_RED;
-  if (th.neon) {
-    spr.fillRoundRect(6, 92, 123, 84, 6, th.panel);
-    drawThemedBox(6, 92, 123, 84, 6, edge, true);
-  } else {
-    spr.fillRect(6, 92, 123, 84, TFT_BLACK);
-    spr.drawRect(6, 92, 123, 84, TFT_RED);
-  }
-  spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(edge);
-  spr.drawString(title, 67, 98, 2);
-  spr.setTextColor(th.text);
-  snprintf(buf, sizeof buf, "%lu", (unsigned long)score);
-  spr.drawString(buf, 67, 116, 2);
-  if (newHigh) {
-    spr.setTextColor(th.neon ? th.accent2 : TFT_YELLOW);
-    spr.drawString("NEW BEST!", 67, 134, 2);
-  } else {
-    spr.setTextColor(themeSoft());
-    snprintf(buf, sizeof buf, "Best %lu", (unsigned long)best);
-    spr.drawString(buf, 67, 134, 2);
-  }
-  // button hints: "L menu   R again"
-  spr.setTextDatum(TL_DATUM);
-  spr.setTextColor(th.keyHint);
-  spr.drawString("L", 16, 154, 2);
-  spr.drawString("R", 68, 154, 2);
-  spr.setTextColor(th.neon ? th.accent : TFT_GREEN);
-  spr.drawString("menu", 28, 154, 2);
-  spr.drawString("again", 80, 154, 2);
-}
-
-EndChoice startOrEnd(bool gameOver, int eL, int eR, bool &armed) {
-  if (eL == 1 || eR == 1) armed = true;              // need a fresh press...
-  if (!armed || (eL != 2 && eR != 2)) return END_NONE;   // ...and its release
-  armed = false;
-  if (gameOver && eL == 2) {
-    returnToMenu();
-    return END_MENU;
-  }
-  return END_PLAY;
-}
-
-void drawToolFooter(const char *l, const char *r) {
-  spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(theme().textDim);
-  spr.drawString("hold L: menu", 67, 206, 1);
-  drawThemedFooter(l, r, 220, 70);
-}
-
-// ---------------- sleep entry ----------------
-#if PIN_RIGHT == 35
-  #define WAKE_BTN "R"
-#else
-  #define WAKE_BTN "L"
-#endif
-
-void drawMoon(int x, int y, int r, uint16_t col, uint16_t bg) {
-  spr.fillCircle(x, y, r, col);
-  spr.fillCircle(x + r / 2, y - r / 3, r - 1, bg);    // bite out a crescent
-}
-
-void sleepIcon(int x, int y, bool dim, uint32_t t) {
-  const Theme &th = theme();
-  drawMoon(x - 2, y, 11, dim ? themeFade(80, TFT_YELLOW) : TFT_YELLOW, th.bg);
-  // the two stars twinkle in turn
-  auto star = [&](uint32_t phase) -> uint16_t {
-    if (dim) return th.textDim;
-    if (!t) return TFT_WHITE;
-    return themeFade(60 + (int)(195 * triWave(t + phase, 1600)), TFT_WHITE);
-  };
-  spr.fillCircle(x + 9, y + 6, 1, star(800));
-  spr.drawPixel(x + 5, y - 10, star(0));
-}
-
-void sleepInfo(char *buf, size_t n) { snprintf(buf, n, WAKE_BTN " wakes it up"); }
-
-void sleepNow() {
-  const Theme &th = theme();
-  spr.fillSprite(th.bg);
-  drawMoon(67, 80, 24, TFT_YELLOW, th.bg);
-  spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(th.text);
-  spr.drawString("Good night", 67, 130, 4);
-  spr.setTextColor(themeSoft());
-  spr.drawString("Press " WAKE_BTN " to wake", 67, 164, 2);
-  spr.pushSprite(0, 0);
-  delay(1500);
-  deepSleepNow();
-}
+#include "ui_common.h"
+#include "cart.h"
+#include "updates.h"
 
 // ---------------- items ----------------
 // One flat array: the games (alphabetical, case-insensitive; digits first),
 // then the apps (alphabetical), then Settings and Sleep. Crash records keep
 // an index into it (noteActiveItem / itemName), numGames() / gameInfo() count
 // the leading games, so Settings' reset list is alphabetical too.
+// The cartridge's games have no code here: their entries open the cartridge
+// screen (cartui), which starts them or offers the download.
+namespace launcher {
+int activeItem();
+void abyxIcon(int cx, int cy, bool dim, uint32_t t);
+void cryptIcon(int cx, int cy, bool dim, uint32_t t);
+}
+static void heavyBegin();
+static void heavyUpdate(uint32_t now);
+
 struct MenuItem {
-  const char *name;              // font 4, must stay under ~90 px to clear the icon
+  const char *name;              // font 4 (font 2 when wider than the box allows)
   const char *hiKey;             // NVS key of a game's high score; nullptr if not a game
   void (*begin)();
   void (*update)(uint32_t now);  // nullptr: begin() never returns
@@ -175,11 +54,12 @@ struct MenuItem {
   const char *action;            // footer verb for R
 };
 #define GAME(name, key, ns) {name, key, ns::begin, ns::update, ns::drawIcon, nullptr, "play"}
+#define HEAVY(name, key, icon) {name, key, heavyBegin, heavyUpdate, icon, nullptr, "play"}
 #define APP(name, ns) {name, nullptr, ns::begin, ns::update, ns::drawIcon, ns::menuInfo, "open"}
 static const MenuItem ITEMS[] = {
   GAME("2048",    "g2048_hi",   game2048),
   GAME("21",      "bj21_hi",    blackjack),
-  GAME("Abyx",    "abyx_hi",    abyx),
+  HEAVY("Abyx",   "abyx_hi",    launcher::abyxIcon),
   GAME("Bowl",    "bowl_hi",    bowl),
   GAME("Bricks",  "bricks_hi",  bricks),
   GAME("Bumper",  "bumper_hi",  bumper),
@@ -190,7 +70,7 @@ static const MenuItem ITEMS[] = {
   GAME("Code",    "code_hi",    codebreak),
   GAME("Columns", "columns_hi", columns),
   GAME("Crossy",  "crossy_hi",  crossy),
-  GAME("Crypt",   "crypt_hi",   cryptgame),
+  HEAVY("Crypt",  "crypt_hi",   launcher::cryptIcon),
   GAME("Dino",    "dino_hi",    dino),
   GAME("Dodge",   "dodge_hi",   dodge),
   GAME("Doodle",  "doodle_hi",  doodle),
@@ -239,7 +119,7 @@ static const MenuItem ITEMS[] = {
   // apps
   APP("Breathe", breathe),
   APP("Clock",   clockapp),
-  APP("Companion", companionapp),
+  APP("Comp.",   companionapp),
   APP("Dice",    dice),
   APP("Minute",  minute),
   APP("Morse",   morse),
@@ -254,6 +134,7 @@ static const MenuItem ITEMS[] = {
   {"Sleep",    nullptr, sleepNow,        nullptr,          sleepIcon,          sleepInfo,          "sleep"},
 };
 #undef GAME
+#undef HEAVY
 #undef APP
 static const int NUM_ITEMS = sizeof ITEMS / sizeof ITEMS[0];
 static const int ITEM_SETTINGS = NUM_ITEMS - 2, ITEM_SLEEP = NUM_ITEMS - 1;
@@ -274,6 +155,13 @@ static const char *const OLD_GAME_ORDER[] = {
   "reversi_hi", "fringe_hi",
 };
 static const int OLD_GAME_COUNT = sizeof OLD_GAME_ORDER / sizeof OLD_GAME_ORDER[0];
+
+static bool isHeavy(int i) { return i >= 0 && i < NUM_ITEMS && ITEMS[i].begin == heavyBegin; }
+
+static void heavyBegin() { cartui::open(ITEMS[launcher::activeItem()].hiKey); }
+static void heavyUpdate(uint32_t now) {
+  if (!cartui::update(now)) returnToMenu();
+}
 
 const char *itemName(int i) { return i >= 0 && i < NUM_ITEMS ? ITEMS[i].name : "menu"; }
 
@@ -314,9 +202,16 @@ static int savedCat = -1, savedItem = -1;  // what "menuCat" / "menuLast" hold (
 static const int LAUNCH_Y = 39, LAUNCH_PITCH = 44, LAUNCH_BOX_H = 41;
 // the lists scroll inside a viewport between the header and the footer
 static const int MENU_LIST_Y = 26, MENU_LIST_H = 186;       // screen rows 26..211
-static const int BOX_H = 56, BOX_PITCH = 62;      // 3 boxes fit in the viewport
+static const int BOX_H = 46, BOX_PITCH = 50;      // ~3.7 boxes fit in the viewport
 static const int ICON_X = 114, ICON_HALF_W = 13, ICON_HALF_H = 16;   // icon clip area around (ICON_X, box centre)
 static const uint32_t ICON_FRAME_MS = 33;         // the selected icon animates at ~30 fps
+static const int NAME_MAX_W = ICON_X - ICON_HALF_W - 14;   // names wider than this are cut
+
+// names are drawn in font 2, doubled one pixel to the right so they read bold
+static void drawBold(const char *s, int x, int y) {
+  spr.drawString(s, x, y, 2);
+  spr.drawString(s, x + 1, y, 2);
+}
 
 // ---------------- list geometry ----------------
 static int listIdx() { return view == VIEW_APPS ? 1 : 0; }
@@ -386,8 +281,9 @@ static void restore() {
 }
 
 // ---------------- drawing ----------------
-// battery / USB badge with its left edge at x = 6 and its top at y, WiFi arcs after it
-static void drawBadges(uint32_t now, int y) {
+// battery / USB badge with its left edge at x = 6 and its top at y, WiFi arcs
+// after it, then (launcher header only) an arrow when a launcher update is out
+static void drawBadges(uint32_t now, int y, bool updateBadge) {
   static int mv = 0;
   static uint32_t mvAt = 0;
   if (!mvAt || (int32_t)(now - mvAt) > 5000) {
@@ -408,6 +304,11 @@ static void drawBadges(uint32_t now, int y) {
     uint16_t wc = theme().neon ? theme().accent : TFT_CYAN;
     for (int r = 3; r <= 9; r += 3) spr.drawCircleHelper(37, y + 9, r, 1 | 2, wc);
     spr.fillCircle(37, y + 8, 1, wc);
+  }
+  if (updateBadge && updates::updateAvailable()) {
+    uint16_t uc = (now / 600) % 2 ? theme().ok : themeFade(150, theme().ok);   // a slow blink
+    spr.fillTriangle(48, y + 4, 52, y, 56, y + 4, uc);
+    spr.fillRect(51, y + 4, 3, 5, uc);
   }
 }
 
@@ -452,6 +353,51 @@ static void backIcon(int cx, int cy, bool dim, uint32_t t) {
   spr.fillRect(cx - 1 + dx, cy - 3, 10, 6, col);
 }
 
+// ---- the cartridge's games, drawn here since their code is not in the launcher ----
+// small "download" badge on an icon whose game is not installed
+static void downloadBadge(int cx, int cy, bool dim) {
+  const Theme &th = theme();
+  uint16_t c = dim ? themeFade(110, th.accent) : th.accent;
+  spr.fillCircle(cx + 7, cy + 9, 5, c);
+  spr.fillRect(cx + 6, cy + 5, 3, 4, th.bg);
+  spr.fillTriangle(cx + 4, cy + 9, cx + 10, cy + 9, cx + 7, cy + 12, th.bg);
+}
+
+void abyxIcon(int cx, int cy, bool dim, uint32_t t) {     // an anglerfish and its lure
+  const Theme &th = theme();
+  uint16_t body = dim ? themeFade(90, 0x3A7F) : 0x3A7F;
+  uint16_t glow = dim ? themeFade(90, TFT_YELLOW) : TFT_YELLOW;
+  float p = t ? triWave(t, 1200) : 1.0f;
+  spr.fillEllipse(cx - 1, cy + 3, 9, 7, body);
+  spr.fillTriangle(cx + 6, cy + 3, cx + 12, cy - 3, cx + 12, cy + 9, body);    // tail
+  spr.fillCircle(cx - 4, cy, 2, dim ? th.textDim : TFT_WHITE);                  // eye
+  spr.drawPixel(cx - 4, cy, TFT_BLACK);
+  spr.drawFastHLine(cx - 10, cy + 6, 6, th.bg);                                 // mouth and teeth
+  spr.drawPixel(cx - 9, cy + 5, TFT_WHITE);
+  spr.drawPixel(cx - 7, cy + 5, TFT_WHITE);
+  spr.drawLine(cx - 3, cy - 4, cx - 6, cy - 10, body);                          // the lure's stalk
+  spr.drawLine(cx - 6, cy - 10, cx - 9, cy - 9, body);
+  if (!dim) spr.drawCircle(cx - 9, cy - 8, 3 + (int)(2 * p), themeFade(60 + (int)(120 * p), glow));
+  spr.fillCircle(cx - 9, cy - 8, 2, glow);
+  if (cartState() == CART_NONE) downloadBadge(cx, cy, dim);
+}
+
+void cryptIcon(int cx, int cy, bool dim, uint32_t t) {    // a gravestone and a wisp
+  const Theme &th = theme();
+  uint16_t stone = dim ? themeFade(90, 0x9CF3) : 0x9CF3;
+  uint16_t ground = dim ? themeFade(80, 0x2444) : 0x2444;
+  uint16_t wisp = dim ? themeFade(90, 0x87F0) : 0x87F0;
+  spr.fillRect(cx - 12, cy + 10, 24, 4, ground);
+  spr.fillRoundRect(cx - 8, cy - 11, 16, 16, 7, stone);
+  spr.fillRect(cx - 8, cy - 2, 16, 13, stone);
+  spr.fillRect(cx - 1, cy - 7, 3, 12, th.bg);                                   // the cross
+  spr.fillRect(cx - 4, cy - 4, 9, 3, th.bg);
+  int bob = t ? (int)(4 * triWave(t, 1400)) : 2;
+  spr.fillCircle(cx + 9, cy - 9 + bob, 2, wisp);
+  spr.drawPixel(cx + 9, cy - 6 + bob, wisp);
+  if (cartState() == CART_NONE) downloadBadge(cx, cy, dim);
+}
+
 static void entryIcon(int e, int cx, int cy, bool dim, uint32_t t) {
   if (e == ENT_GAMES) gamepadIcon(cx, cy, dim, t);
   else if (e == ENT_APPS) appsIcon(cx, cy, dim, t);
@@ -485,7 +431,7 @@ static void renderLauncher(uint32_t now) {
     spr.setTextColor(TFT_LIGHTGREY);
   }
   spr.drawString("TTGO ARCADE", 6, 4, 2);
-  drawBadges(now, 23);
+  drawBadges(now, 23, true);
   spr.setViewport(92, 0, 43, LAUNCH_Y - 3, false);
   TigoPose pose = (now / 1000) % 8 == 0 ? TIGO_HAPPY : TIGO_IDLE;   // a little cheer now and then
   drawTigo(114, LAUNCH_Y - 4, 30, pose, now, true);
@@ -498,12 +444,12 @@ static void renderLauncher(uint32_t now) {
     drawSelBox(6, y, 123, LAUNCH_BOX_H, 6, sel);
     spr.setTextDatum(TL_DATUM);
     spr.setTextColor(sel ? th.text : th.textDim);
-    spr.drawString(ENTRY_NAME[e], 12, y + 2, 4);
+    drawBold(ENTRY_NAME[e], 12, y + 7);
     if (e == ENT_GAMES) snprintf(buf, sizeof buf, "%d games", itemCount(0));
     else if (e == ENT_APPS) snprintf(buf, sizeof buf, "%d apps", itemCount(1));
     else ITEMS[e == ENT_SETTINGS ? ITEM_SETTINGS : ITEM_SLEEP].info(buf, sizeof buf);
     spr.setTextColor(!sel ? th.textDim : th.neon ? th.accent : TFT_LIGHTGREY);
-    spr.drawString(buf, 12, y + 30, 1);
+    spr.drawString(buf, 12, y + 27, 1);
     if (clipIcon(y + 20, y + 1, y + LAUNCH_BOX_H - 1)) entryIcon(e, ICON_X, y + 20, !sel, sel ? animClock(now) : 0);
     spr.resetViewport();
   }
@@ -517,7 +463,7 @@ static void renderList(uint32_t now) {
   const Theme &th = theme();
   int l = listIdx(), scroll = listScroll[l], rows = rowCount(l);
   spr.fillSprite(th.bg);
-  drawBadges(now, 9);
+  drawBadges(now, 9, false);
   spr.setTextDatum(TC_DATUM);
   spr.setTextColor(th.neon ? th.frameSel : TFT_LIGHTGREY);
   spr.drawString(l ? "APPS" : "GAMES", 67, 6, 2);
@@ -533,17 +479,28 @@ static void renderList(uint32_t now) {
     int g = rowItem(l, r);
     drawSelBox(6, y, 123, BOX_H, 6, sel);
 
-    spr.setTextColor(sel ? th.text : th.textDim);
-    spr.drawString(g < 0 ? "< Back" : ITEMS[g].name, 12, y + 6, 4);
+    // a cartridge game that is not installed is greyed
+    int cs = isHeavy(g) ? cartState() : CART_READY;
+    bool grey = cs == CART_NONE;
+    const char *name = g < 0 ? "< Back" : ITEMS[g].name;
+    uint16_t nameCol = sel ? th.text : th.textDim;
+    if (grey) nameCol = sel ? th.textDim : themeFade(140, th.textDim);
+    spr.setTextColor(nameCol);
+    drawBold(name, 12, y + 8);
     spr.setTextColor(!sel ? th.textDim : th.neon ? th.accent : TFT_LIGHTGREY);
+    uint32_t best = g >= 0 && ITEMS[g].hiKey ? prefs.getUInt(ITEMS[g].hiKey, 0) : 0;
     if (g < 0) snprintf(buf, sizeof buf, "hold R: back");
-    else if (ITEMS[g].hiKey) snprintf(buf, sizeof buf, "Best %lu", (unsigned long)prefs.getUInt(ITEMS[g].hiKey, 0));
+    else if (cs == CART_NONE) snprintf(buf, sizeof buf, "Download");
+    else if (cs == CART_OUTDATED) snprintf(buf, sizeof buf, "Update");
+    else if (isHeavy(g) && !best) snprintf(buf, sizeof buf, "Ready");
+    else if (ITEMS[g].hiKey) snprintf(buf, sizeof buf, "Best %lu", (unsigned long)best);
     else ITEMS[g].info(buf, sizeof buf);
-    spr.drawString(buf, 12, y + 34, 2);
+    if (sel && cs != CART_READY) spr.setTextColor(th.neon ? th.accent2 : TFT_CYAN);
+    spr.drawString(buf, 12, y + 30, 1);
 
     // icon, clipped to its own area within the list (absolute coordinates);
     // only the selected one moves
-    int cy = MENU_LIST_Y + y + 28;
+    int cy = MENU_LIST_Y + y + BOX_H / 2;
     uint32_t t = sel ? animClock(now) : 0;
     if (clipIcon(cy, MENU_LIST_Y, MENU_LIST_Y + MENU_LIST_H)) {
       if (g < 0) backIcon(ICON_X, cy, !sel, t);
@@ -559,7 +516,8 @@ static void renderList(uint32_t now) {
   if (scroll < maxScroll(l)) spr.fillTriangle(124, 222, 132, 222, 128, 228, arrow);
 
   int g = rowItem(l, listSel[l]);
-  drawThemedFooter("next", g < 0 ? "back" : ITEMS[g].action, 218, 74);
+  const char *act = g < 0 ? "back" : isHeavy(g) && cartState() == CART_NONE ? "get" : ITEMS[g].action;
+  drawThemedFooter("next", act, 218, 74);
   spr.pushSprite(0, 0);
 }
 
@@ -677,41 +635,61 @@ void begin() {
 
 int activeItem() { return active; }
 
+// back from the cartridge: straight into the Games list, on the game it ran
+void showGames() { showView(VIEW_GAMES, millis()); }
+
 }  // namespace launcher
 
 void returnToMenu() { launcher::backFromItem(); }
 
 // ---------------- main ----------------
-void setup() {
-  initPower();
-
-  pinMode(0, INPUT_PULLUP);
-  pinMode(35, INPUT);              // input-only pin, pulled up on the board
-
-  // a button still held from the wake-up press must not count as a press
-  bL.raw = bL.stable = digitalRead(bL.pin) == LOW;
-  bR.raw = bR.stable = digitalRead(bR.pin) == LOW;
-
-  tft.init();
-  tft.setRotation(SCREEN_ROTATION);
-  tft.fillScreen(TFT_BLACK);
-
-  spr.setColorDepth(16);
-  if (!spr.createSprite(tft.width(), tft.height())) {
-    spr.setColorDepth(8);          // fallback if heap is tight
-    spr.createSprite(tft.width(), tft.height());
+// A cartridge session that did not end through returnToMenu(): diag.cpp read
+// the cartridge's RTC record with the launcher's item list, so name the game
+// from the hand-over key instead.
+static void noteCartCrash(const char *before, const char *hiKey) {
+  const char *kind = nullptr;
+  switch (esp_reset_reason()) {
+    case ESP_RST_PANIC:    kind = "crash"; break;
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:      kind = "watchdog"; break;
+    case ESP_RST_BROWNOUT: kind = "brownout"; break;
+    default: break;
   }
+  char now[40] = "";
+  bool fresh = lastCrash(now, sizeof now) && strcmp(now, before);   // diag recorded something this boot
+  if (!kind && !fresh) return;
+  if (!kind) kind = "reset";
+  int gi = cartGameIndex(hiKey);
+  char buf[40];
+  snprintf(buf, sizeof buf, "%s in %s", kind, gi >= 0 ? CART_GAMES[gi].name : CART_TITLE);
+  prefs.putString("lastcrash", buf);
+}
 
-  prefs.begin("tetris", false);
+void setup() {
+  bootHardware();                  // power, buttons, display, sprite, prefs
+
+  char crashBefore[40] = "";
+  lastCrash(crashBefore, sizeof crashBefore);
   initDiag(itemName);
+  char cartGame[16];
+  CartReturn back = cartBootReturn(cartGame, sizeof cartGame);
+  if (back == CART_RET_UNCLEAN) noteCartCrash(crashBefore, cartGame);
+  dbg("launcher build %u%s\n", (unsigned)FW_BUILD, back == CART_RET_CLEAN ? ", back from the cartridge" : "");
+
   initBacklight();
   initWifi();
   initBle();
+  updates::begin();
   launcher::begin();               // remembered category and item, lists scrolled to them
+  if (back == CART_RET_CLEAN) launcher::showGames();
 
   // PIN lock before the menu works (boot and wake from deep sleep); the
-  // wake-up press is still held and doesn't count (stable already set above)
-  if (lockscr::enabled()) {
+  // wake-up press is still held and doesn't count (stable already set above).
+  // Not after a clean return from the cartridge: it was unlocked to start it
+  // (a reset or a wake from sleep in the cartridge is not "clean").
+  bool unlocked = back == CART_RET_CLEAN && esp_reset_reason() == ESP_RST_SW;
+  if (lockscr::enabled() && !unlocked) {
     lockscr::run();
     launcher::touch();             // fresh idle / animation clocks after the lock screen
   }
@@ -722,6 +700,9 @@ void loop() {
   int item = launcher::activeItem();
   if (item >= 0) ITEMS[item].update(now);
   else launcher::update(now);
+  item = launcher::activeItem();
+  // update checks and their downloads: launcher, Settings, cartridge screen; never in a game
+  if (item < 0 || item == ITEM_SETTINGS || isHeavy(item)) updates::service(now);
   timeService(now);
   bleService(now);
 

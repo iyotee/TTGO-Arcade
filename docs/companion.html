@@ -18,6 +18,9 @@
     ...cade03  wifi     write  "ssid\npassword" (encrypted link: the phone pairs first)
     ...cade04  time     write  uint32 little-endian Unix time (UTC seconds)
     ...cade05  status   read + notify  JSON {"bat","mv","usb","wifi","ssid","ip","on","ble"}
+    ...cade06  install  write / write without response + notify (encrypted link): streams a
+               cartridge image (fw/manifest.json lists them) into the board's spare app slot.
+               Protocol: see the comment at the top of src/ble.cpp.
 -->
 <style>
   :root {
@@ -122,6 +125,19 @@
   .pill.on { background: var(--teal); color: #fff; }
   .pill.off { background: #eee; color: var(--muted); }
   #log { font: .78rem ui-monospace, Consolas, monospace; color: var(--muted); max-height: 7.5em; overflow: auto; margin: 8px 0 0; white-space: pre-wrap; }
+  /* ---------------- install games ---------------- */
+  .cart { background: #fff; border: 2px solid var(--plum); border-radius: 14px; padding: 10px 12px; margin-top: 8px; }
+  .cart .name { font-weight: 800; color: var(--plum); font-size: 1.05rem; }
+  .cart .meta { font-size: .8rem; color: var(--muted); margin: 2px 0 8px; }
+  .cart .games { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .cart .games span { font-size: .78rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--sand); border: 2px solid var(--plum); color: var(--plum); }
+  .progress { height: 16px; border: 2px solid var(--plum); border-radius: 999px; background: #fff; overflow: hidden; margin-top: 10px; }
+  .progress i { display: block; height: 100%; width: 0; background: repeating-linear-gradient(45deg, var(--teal) 0 10px, #36c4b8 10px 20px); transition: width .25s; }
+  .progress.fail i { background: var(--claw); }
+  .instRow { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted); margin-top: 4px; }
+  #instState { font-weight: 700; color: var(--plum); margin-top: 8px; min-height: 1.2em; }
+  a.btn { display: inline-block; text-decoration: none; text-align: center; }
+  a.btn.coffee { background: #FFDD00; color: var(--ink); }
   footer { text-align: center; font-size: .8rem; color: var(--muted); margin-top: 18px; }
   footer a { color: var(--plum); }
 </style>
@@ -226,7 +242,7 @@
       <span class="state" id="connState" style="flex:1">Not connected</span>
       <button id="connectBtn" class="teal">Connect</button>
     </div>
-    <p class="note">On the board, switch Bluetooth on in <b>Settings</b> (or open the <b>Remote</b> app),
+    <p class="note">On the board, open the <b>Companion</b> app (or switch Bluetooth on in <b>Settings</b>),
       then pick <b>TTGO-Arcade</b> in the list.</p>
   </section>
 
@@ -297,8 +313,31 @@
     <div id="log"></div>
   </section>
 
+  <section class="card" id="installCard">
+    <h2><span class="dot"></span> Install games</h2>
+    <p style="margin:0" id="manifestState">Looking for games...</p>
+    <div id="carts"></div>
+    <div id="instBox" class="hidden">
+      <div id="instState"></div>
+      <div class="progress" id="instBar"><i></i></div>
+      <div class="instRow"><span id="instPct"></span><span id="instEta"></span></div>
+      <button id="instCancel" class="ghost wide" style="margin-top:10px">Cancel</button>
+    </div>
+    <p class="note">The big games live in a separate "cartridge" next to the board's own firmware.
+      Keep the board's <b>Companion</b> app open, on USB or with some battery left, and this page in front
+      (the screen stays on). Your phone may ask to <b>pair</b>: accept. If the link drops, tap Install again:
+      it carries on where it stopped. Installing a launcher update later erases the cartridge; the board
+      offers to download it again.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span> Support Tigo</h2>
+    <p style="margin:0 0 10px">TTGO-Arcade is free. If it made you smile, you can buy Tigo a coffee.</p>
+    <a class="btn coffee wide" href="https://buymeacoffee.com/zcnxsnw3vw" target="_blank" rel="noopener">Buy Tigo a coffee</a>
+  </section>
+
   <footer>
-    <a href="https://github.com/iyotee/TTGO-Arcade">TTGO-Arcade on GitHub</a> · Tigo says hi
+    <a href="https://github.com/iyotee/TTGO-Arcade">TTGO-Arcade on GitHub</a> · <a href="./">Home</a> · Tigo says hi
   </footer>
 </main>
 
@@ -308,7 +347,7 @@
   const BASE = '7160c0de-5e11-4c0d-8a7c-7160a2cade';
   const UUID = {
     service: BASE + '00', message: BASE + '01', treat: BASE + '02',
-    wifi: BASE + '03', time: BASE + '04', status: BASE + '05',
+    wifi: BASE + '03', time: BASE + '04', status: BASE + '05', install: BASE + '06',
   };
   const $ = id => document.getElementById(id);
   const enc = new TextEncoder(), dec = new TextDecoder();
@@ -400,14 +439,7 @@
       setConnected(false, 'Connecting...');
       const server = await device.gatt.connect();
       const svc = await server.getPrimaryService(UUID.service);
-      chars = {};
-      for (const k of ['message', 'treat', 'wifi', 'time', 'status']) chars[k] = await svc.getCharacteristic(UUID[k]);
-      chars.status.addEventListener('characteristicvaluechanged', ev => {
-        // a notification can be cut to the link's MTU: read the whole value then
-        const s = parseStatus(ev.target.value);
-        if (s) showStatus(s); else readStatus().catch(() => {});
-      });
-      await chars.status.startNotifications();
+      await attach(server);
       setConnected(true);
       log('connected');
       say('Hey! I can hear you!');
@@ -419,8 +451,28 @@
       if (e.name !== 'NotFoundError') { log('connect failed: ' + e.message); say('Hmm, no crab found...'); }
     }
   }
+  // characteristics + notifications (also used to reconnect during an install)
+  async function attach(server) {
+    const svc = await server.getPrimaryService(UUID.service);
+    chars = {};
+    for (const k of ['message', 'treat', 'wifi', 'time', 'status']) chars[k] = await svc.getCharacteristic(UUID[k]);
+    chars.status.addEventListener('characteristicvaluechanged', ev => {
+      // a notification can be cut to the link's MTU: read the whole value then
+      const s = parseStatus(ev.target.value);
+      if (s) showStatus(s); else readStatus().catch(() => {});
+    });
+    await chars.status.startNotifications();
+    // older firmware has no install characteristic
+    chars.install = await svc.getCharacteristic(UUID.install).catch(() => null);
+    if (chars.install) {
+      chars.install.addEventListener('characteristicvaluechanged', ev => Install.onNotify(ev.target.value));
+      await chars.install.startNotifications();
+    }
+    Install.linkChanged();
+  }
   function onDisconnected() {
     chars = {};
+    Install.linkChanged();
     setConnected(false);
     log('disconnected');
     say('Bye bye!');
@@ -515,8 +567,299 @@
     if (await write('time', buf, 'clock sync')) { say('Tick tock, got it!'); happy(); }
   });
 
+  // ---------------- install games (cartridges) ----------------
+  // Downloads a cartridge listed in fw/manifest.json, checks its sha256, then
+  // streams it to the board (protocol at the top of src/ble.cpp): BEGIN, DATA
+  // packets inside the board's window, ACK / RESEND notifications, END.
+  const Install = (() => {
+    const FW = location.hostname.endsWith('github.io') ? new URL('fw/', location.href).href
+                                                       : 'https://iyotee.github.io/TTGO-Arcade/fw/';
+    const MANIFEST = FW + 'manifest.json';
+    const GAME_NAMES = { abyx_hi: 'Abyx', crypt_hi: 'Crypt' };
+    const ERR = {
+      1: 'the board is busy with another install', 2: 'the board is low on memory',
+      3: 'the link is not encrypted (pair the phone)', 4: 'the board did not understand',
+      5: 'the board could not prepare its flash', 6: 'writing the flash failed',
+      7: 'the image failed its check on the board', 8: 'battery low: plug the board into USB',
+      9: 'timed out', 10: 'cancelled', 11: 'Bluetooth stopped on the board',
+    };
+    const ST_RECEIVING = 2;                // board install states: 0 idle, 1 preparing, 2 receiving, 3 checking, 4 done, 5 failed
+    let carts = [], installing = false, cancelled = false, wakeLock = null;
+    let events = [], waiter = null;
+    const cache = {};                      // sha256 -> verified image: a retry doesn't download again
+
+    const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+    const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(2) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+    const fmtTime = s => s >= 90 ? Math.round(s / 60) + ' min' : Math.max(1, Math.round(s)) + ' s';
+    const gameName = k => GAME_NAMES[k] || String(k).replace(/_hi$/, '').replace(/^./, c => c.toUpperCase());
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const fatal = msg => { const e = new Error(msg); e.fatal = true; return e; };
+    const errText = e => (ERR[e.code] || 'error ' + e.code) + (e.text ? ' (' + e.text + ')' : '');
+
+    // ---- UI ----
+    function state(s) { $('instState').textContent = s; }
+    function setBar(p, failed) {
+      $('instBar').querySelector('i').style.width = Math.max(0, Math.min(1, p)) * 100 + '%';
+      $('instBar').classList.toggle('fail', !!failed);
+    }
+    function render() {
+      const box = $('carts');
+      box.textContent = '';
+      for (const c of carts) {
+        const d = document.createElement('div');
+        d.className = 'cart';
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = c.name;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = fmtSize(c.size) + (c.build ? ' · build ' + c.build : '');
+        const games = document.createElement('div');
+        games.className = 'games';
+        for (const g of (Array.isArray(c.games) ? c.games : [])) {
+          const s = document.createElement('span');
+          s.textContent = gameName(g);
+          games.appendChild(s);
+        }
+        const btn = document.createElement('button');
+        btn.className = 'wide';
+        const linked = !!chars.status, can = !!chars.install;
+        btn.textContent = installing ? 'Installing...' : !linked ? 'Connect the board first' :
+                          !can ? 'Update the board first' : 'Install via Bluetooth';
+        btn.disabled = installing || !can;
+        btn.addEventListener('click', () => install(c));
+        d.append(name, meta, games, btn);
+        box.appendChild(d);
+      }
+    }
+    function progress(acked, size, t0, from) {
+      setBar(acked / size);
+      $('instPct').textContent = Math.floor(acked / size * 100) + ' %  ' + fmtSize(acked) + ' / ' + fmtSize(size);
+      const dt = (performance.now() - t0) / 1000, speed = (acked - from) / dt;
+      if (dt > 2 && speed > 0)
+        $('instEta').textContent = (speed / 1024).toFixed(1) + ' KB/s · ' + fmtTime((size - acked) / speed) + ' left';
+    }
+    async function keepAwake(on) {
+      try {
+        if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+        else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+      } catch (e) { /* not allowed here: fine */ }
+    }
+
+    // ---- notifications from the board ----
+    function onNotify(dv) {
+      if (!dv.byteLength) return;
+      const op = dv.getUint8(0), e = { op };
+      if (op === 0x81 && dv.byteLength >= 11) {
+        e.resume = dv.getUint32(1, true); e.window = dv.getUint32(5, true); e.chunk = dv.getUint16(9, true);
+      } else if ((op === 0x82 || op === 0x84) && dv.byteLength >= 5) {
+        e.offset = dv.getUint32(1, true);
+      } else if (op === 0x85 && dv.byteLength >= 14) {
+        e.state = dv.getUint8(1); e.received = dv.getUint32(2, true); e.written = dv.getUint32(6, true);
+        e.size = dv.getUint32(10, true);
+      } else if (op === 0x8F) {
+        e.code = dv.byteLength > 1 ? dv.getUint8(1) : 0;
+        e.text = dv.byteLength > 2 ? dec.decode(new Uint8Array(dv.buffer, dv.byteOffset + 2, dv.byteLength - 2)) : '';
+      }
+      if (waiter) { const w = waiter; waiter = null; w(e); } else events.push(e);
+    }
+    function nextEvent(ms) {
+      if (events.length) return Promise.resolve(events.shift());
+      return new Promise(resolve => {
+        const t = setTimeout(() => { waiter = null; resolve(null); }, ms);
+        waiter = e => { clearTimeout(t); resolve(e); };
+      });
+    }
+    function wake() { if (waiter) { const w = waiter; waiter = null; w({ op: 0 }); } }
+
+    // ---- steps ----
+    async function download(c) {
+      const want = String(c.sha256 || '').toLowerCase();
+      if (want && cache[want]) return cache[want];
+      state('Downloading ' + c.name + '...');
+      const r = await fetch(new URL(c.url || 'cartridge.bin', MANIFEST).href, { cache: 'no-store' });
+      if (!r.ok) throw fatal('download failed (HTTP ' + r.status + ')');
+      const total = c.size || +r.headers.get('content-length') || 0;
+      let img;
+      if (r.body && r.body.getReader) {
+        const reader = r.body.getReader(), parts = [];
+        let got = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value);
+          got += value.length;
+          if (total) { setBar(got / total); $('instPct').textContent = 'download ' + Math.min(100, Math.floor(got / total * 100)) + ' %'; }
+        }
+        img = new Uint8Array(got);
+        let o = 0;
+        for (const p of parts) { img.set(p, o); o += p.length; }
+      } else {
+        img = new Uint8Array(await r.arrayBuffer());
+      }
+      if (c.size && img.length !== c.size) throw fatal('download incomplete (' + img.length + ' of ' + c.size + ' bytes)');
+      state('Checking the download...');
+      const sha = new Uint8Array(await crypto.subtle.digest('SHA-256', img));
+      if (want && hex(sha) !== want) throw fatal('download corrupted (sha256 mismatch), try again later');
+      img.sha = sha;
+      if (want) cache[want] = img;
+      return img;
+    }
+
+    async function stream(c, img) {
+      const ch = chars.install;
+      if (!ch) throw new Error('not connected');
+      const send = ch.writeValueWithoutResponse ? d => ch.writeValueWithoutResponse(d) : d => ch.writeValue(d);
+      const size = img.length;
+      events = [];
+      const begin = new Uint8Array(41), bv = new DataView(begin.buffer);
+      begin[0] = 0x01;
+      bv.setUint32(1, size, true);
+      bv.setUint32(5, (c.build || 0) >>> 0, true);
+      begin.set(img.sha, 9);
+      state('Waiting for the board (it clears room first)...');
+      await queue(() => ch.writeValueWithResponse(begin));
+      let e;
+      do { e = await nextEvent(90000); } while (e && e.op !== 0x81 && e.op !== 0x8F && !cancelled);
+      if (cancelled) {
+        await queue(() => ch.writeValueWithResponse(new Uint8Array([0x04]))).catch(() => {});
+        throw fatal('cancelled');
+      }
+      if (!e) throw new Error('the board did not answer');
+      if (e.op === 0x8F) throw fatal(errText(e));
+      const chunk = Math.max(16, Math.min(e.chunk || 16, 512)), win = Math.max(chunk, e.window || chunk);
+      let pos = e.resume, acked = e.resume, stalls = 0;
+      const t0 = performance.now(), from = acked;
+      state(pos ? 'Resuming at ' + fmtSize(pos) + '...' : 'Sending ' + c.name + '...');
+      progress(acked, size, t0, from);
+
+      while (acked < size) {
+        if (cancelled) {
+          await queue(() => ch.writeValueWithResponse(new Uint8Array([0x04]))).catch(() => {});
+          throw fatal('cancelled');
+        }
+        // keep the board's window full; read replies as they come
+        if (!events.length && pos < size && pos - acked + chunk <= win) {
+          const n = Math.min(chunk, size - pos), pkt = new Uint8Array(5 + n);
+          pkt[0] = 0x02;
+          new DataView(pkt.buffer).setUint32(1, pos, true);
+          pkt.set(img.subarray(pos, pos + n), 5);
+          await queue(() => send(pkt));
+          pos += n;
+          continue;
+        }
+        // all sent: a lost last packet shows up as silence, so ask sooner
+        e = events.length ? events.shift() : await nextEvent(pos >= size ? 2500 : 8000);
+        if (!e) {                          // silence: ask the board where it is
+          if (++stalls > 3) throw new Error('the board stopped answering');
+          await queue(() => ch.writeValueWithResponse(new Uint8Array([0x05])));
+          continue;
+        }
+        stalls = 0;
+        if (e.op === 0x82) { acked = Math.max(acked, e.offset); progress(acked, size, t0, from); }
+        else if (e.op === 0x84) pos = e.offset;                              // missed packet: go back
+        else if (e.op === 0x85) {
+          if (e.state !== ST_RECEIVING) throw new Error('the board dropped the install');   // retried
+          acked = Math.max(acked, e.written);
+          pos = e.received;
+        } else if (e.op === 0x8F) throw fatal(errText(e));
+      }
+
+      state('The board checks the cartridge...');
+      await queue(() => ch.writeValueWithResponse(new Uint8Array([0x03])));
+      for (;;) {
+        e = await nextEvent(60000);
+        if (cancelled) throw fatal('cancelled');
+        if (!e) throw new Error('no answer after the last byte');
+        if (e.op === 0x83) return;
+        if (e.op === 0x8F) throw fatal(errText(e));
+        if (e.op === 0x84) throw new Error('the board missed data');  // retried: BEGIN resumes there
+      }
+    }
+
+    async function reconnect() {
+      for (let i = 0; i < 5 && !cancelled; i++) {
+        try {
+          if (!device.gatt.connected) {
+            await sleep(1500);
+            await attach(await device.gatt.connect());
+            setConnected(true);
+          }
+          if (chars.install) return;
+        } catch (e) { log('reconnect: ' + e.message); }
+        await sleep(2000);
+      }
+      throw fatal(cancelled ? 'cancelled' : 'could not reconnect to the board');
+    }
+
+    async function install(c) {
+      if (installing) return;
+      if (!chars.install) { say(chars.status ? 'Update my firmware first!' : 'Connect first!'); return; }
+      installing = true;
+      cancelled = false;
+      render();
+      $('instBox').classList.remove('hidden');
+      $('instCancel').disabled = false;
+      $('instPct').textContent = $('instEta').textContent = '';
+      setBar(0);
+      try {
+        const img = await download(c);
+        if (cancelled) throw fatal('cancelled');
+        await keepAwake(true);
+        for (let attempt = 1; ; attempt++) {
+          try {
+            await stream(c, img);
+            break;
+          } catch (e) {
+            if (cancelled || e.fatal || attempt > 4) throw e;
+            log('install: ' + e.message + ', retrying');
+            state('Link lost, reconnecting (' + attempt + '/4)...');
+            await reconnect();
+          }
+        }
+        setBar(1);
+        const names = (Array.isArray(c.games) ? c.games : []).map(gameName).join(' and ');
+        state('Installed! ' + (names ? names + ' are' : 'The games are') + ' in the Games list.');
+        log(c.name + ' installed');
+        say('New games! Pinch pinch!', 4000);
+        happy();
+      } catch (e) {
+        setBar(1, true);
+        state(cancelled ? 'Cancelled.' : 'Install failed: ' + e.message);
+        log('install failed: ' + e.message);
+        if (!cancelled) say('Oops, that got lost at sea');
+      } finally {
+        installing = false;
+        $('instCancel').disabled = true;
+        keepAwake(false);
+        render();
+      }
+    }
+
+    async function loadManifest() {
+      const st = $('manifestState');
+      try {
+        const r = await fetch(MANIFEST, { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const m = await r.json();
+        carts = (Array.isArray(m.cartridges) ? m.cartridges : []).filter(c => c && c.name && c.size > 0);
+        st.textContent = carts.length ? 'Ready to install on your board:' : 'No games to install yet.';
+        if (m.launcher && m.launcher.build) st.textContent += ' (latest firmware: build ' + m.launcher.build + ')';
+      } catch (e) {
+        st.textContent = 'Could not load the games list (' + e.message + ').';
+      }
+      render();
+    }
+
+    $('instCancel').addEventListener('click', () => { cancelled = true; $('instCancel').disabled = true; wake(); });
+    // a dropped link wakes the stream loop at once (its next write fails and it reconnects)
+    function linkChanged() { if (!chars.install) wake(); render(); }
+    return { onNotify, linkChanged, loadManifest };
+  })();
+
   // ---------------- start ----------------
   setConnected(false);
+  Install.loadManifest();
   if (checkSupport()) say('Pinch L, pinch R!');
   else say('I need Chrome to hear you...', 4000);
   // a gentle look-around for the eyes

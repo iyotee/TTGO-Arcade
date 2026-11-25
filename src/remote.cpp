@@ -137,10 +137,23 @@ static void render(uint32_t now) {
   uint16_t dotCol = !bleRunning() ? TFT_DARKGREY : ready ? TFT_GREEN : (now / 500) % 2 ? C_TEAL : C_CARD;
   spr.fillSmoothCircle(dotX, 42, 4, dotCol, fail ? 0x5000 : C_CARD);
   spr.setTextDatum(TL_DATUM);
-  spr.setTextColor(ready ? TFT_GREEN : !bleRunning() ? TFT_DARKGREY : TFT_ORANGE);
-  spr.drawString(!bleRunning() ? "Bluetooth off" : ready ? "Connected" : fail ? "Not connected" : "Waiting...", 24, 34, 2);
+  // not running while open = still starting, or refused (low memory): it retries by itself
+  const char *err = bleError();
+  spr.setTextColor(ready ? TFT_GREEN : !bleRunning() ? (err[0] ? TFT_RED : TFT_DARKGREY) : TFT_ORANGE);
+  spr.drawString(!bleRunning() ? (err[0] ? err : "Starting...") : ready ? "Connected" : fail ? "Not connected" : "Waiting...",
+                 24, 34, 2);
   spr.setTextDatum(TC_DATUM);
-  if (!ready) {
+  if (!bleRunning() && bleSuspended()) {        // an update holds the radio's memory
+    spr.setTextColor(TFT_LIGHTGREY);
+    spr.drawString("Back after the", 67, 54, 1);
+    spr.setTextColor(C_SAND);
+    spr.drawString("update / download", 67, 66, 1);
+  } else if (!bleRunning() && err[0]) {
+    spr.setTextColor(TFT_LIGHTGREY);
+    spr.drawString("Retrying... turning", 67, 54, 1);
+    spr.setTextColor(C_SAND);
+    spr.drawString("WiFi off may help", 67, 66, 1);
+  } else if (!ready) {
     spr.setTextColor(TFT_LIGHTGREY);
     spr.drawString("On your phone:", 67, 54, 1);
     spr.setTextColor(C_SAND);

@@ -7,14 +7,17 @@
 //   Waiting   : Tap L / Hold L back
 //   Uploading : buttons ignored (the upload runs inside ArduinoOTA.handle())
 //   Error     : Tap R try again · Tap L / Hold L back
-// The board never goes to sleep while this screen is open.
+// The board never goes to sleep while this screen is open. An upload goes into
+// the other app slot, where the Big Games cartridge lives: it is forgotten
+// (cart.h) and can be downloaded again afterwards.
 
 #include "common.h"
 #include "tigo.h"
+#include "cart.h"
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 #include <Update.h>
-#include "esp_bt.h"
+#include "ble.h"
 
 namespace otaui {
 
@@ -93,6 +96,7 @@ static void configure() {
   ArduinoOTA.setPort(OTA_PORT);
   ArduinoOTA.onStart([]() {
     dbg("ota: upload started\n");
+    cartForget();                                      // it is written over the cartridge's slot
     upDone = 0;
     lastProgressFrame = 0;
     setState(S_UPLOAD, millis());
@@ -109,6 +113,7 @@ static void configure() {
   });
   ArduinoOTA.onEnd([]() {
     dbg("ota: done, rebooting\n");
+    cartForget();                                      // the cartridge's slot now holds this launcher
     tigo::save(millis(), true);                        // keep Tigo's needs across the reboot
     setState(S_DONE, millis());
     render(millis());                                  // ArduinoOTA restarts the board right after
@@ -123,9 +128,11 @@ static void configure() {
 static void startOta(uint32_t now) {
   configure();
   wifiIp(ipText, sizeof ipText);
-  // modem sleep makes uploads crawl; only allowed off while Bluetooth is not running
-  sleepOff = esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED;
-  if (sleepOff) WiFi.setSleep(false);
+  // Bluetooth pauses (it holds heap and needs modem sleep on), then modem sleep
+  // can go off: uploads crawl with it
+  bleSuspend(true);
+  sleepOff = true;
+  WiFi.setSleep(false);
   ArduinoOTA.begin();
   otaRunning = true;
   dbg("ota: listening on %s.local (%s):%u\n", OTA_HOST, ipText, OTA_PORT);
@@ -138,6 +145,7 @@ static void stopOta() {
   otaRunning = false;
   if (sleepOff && wifiConnected()) WiFi.setSleep(true);
   sleepOff = false;
+  bleSuspend(false);
   dbg("ota: stopped\n");
 }
 

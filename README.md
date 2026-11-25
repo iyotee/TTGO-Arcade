@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b>🦀 "Hi, I'm Tigo! Two claws, two buttons, 56 games. Pinch L, pinch R, let's play!"</b>
+  <b>🦀 "Hi, I'm Tigo! Two claws, two buttons, 59 games. Pinch L, pinch R, let's play!"</b>
 </p>
 
 # 🎮 TTGO-Arcade
@@ -94,7 +94,7 @@ The boot screen is a launcher with four entries:
 
 | Entry | Opens |
 |---|---|
-| **Games** | All 56 games, in alphabetical order (`2048` and `21` first) |
+| **Games** | All 59 games, in alphabetical order (`2048` and `21` first); the Big Games (Abyx, Crypt) show greyed with **Download** until their cartridge is installed |
 | **Apps** | The 10 pocket apps, in alphabetical order |
 | **Settings** | Brightness, theme, timers, PIN, WiFi, Bluetooth, OTA... |
 | **Sleep** | Deep sleep right away (press **R** to wake) |
@@ -112,7 +112,7 @@ The launcher remembers the last category and item you opened.
 
 ---
 
-## 🎯 Games (56)
+## 🎯 Games (59)
 
 > 🦀 *"Is that a high score? Beat it and I unlock a new shell!"*
 
@@ -122,6 +122,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 |---|---|---|---|
 | **2048** | Puzzle | `Tap L / R` up/right · `Hold L / R` left/down | Merge matching tiles to reach 2048 and beyond |
 | **21** | Puzzle | `Tap L` hit · `Tap R` stand / next hand | Arcade Blackjack; reach the highest chip stack |
+| **Abyx** 🎮 | Big Game | `Hold L / R` walk · `L + R` jump (hold = higher) · auto-fire · `Hold L + R` 1 s still = map | Metroidvania starring Tigo shooting shrimps: 28 rooms, 5 biomes, 5 guardians, powers (bubble jump, Jumbo claw, wall cling, jet dash, heat shell), hidden shells, save clams; portrait or landscape |
 | **Bowl** | Skill | `Tap L / R` set spot, then aim · `Hold L / R` hook | 10-pin bowling, real scoring with strikes & spares (300 max) |
 | **Bricks** | Arcade | `Hold L / R` move paddle | Breakout: clear the wall, 3 lives, faster each level |
 | **Bumper** | Arcade | `Hold L / R` steer · `L + R` turbo ram | Knock AI bots out of the circular sumo arena |
@@ -132,6 +133,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 | **Code** | Puzzle | `Tap L` cycle color · `Hold L` previous peg · `Tap R` next peg / submit | Crack the hidden 4-peg color code from the clues |
 | **Columns** | Puzzle | `Tap L / R` move · `Hold L` cycle gems · `Hold R` fast drop | Match 3+ gems horizontally, vertically, or diagonally |
 | **Crossy** | Runner | `Tap L / R` forward · `Hold L / R` sideways · `L + R` back | Cross roads and rivers; keep moving before the eagle comes |
+| **Crypt** 🎮 | Big Game | `Hold L / R` turn · `Hold L + R` swim forward · `Tap L / R` cast · `Tap L + R` map | Original first-person raycasting crawl through a sunken crypt: 10 depths, keys and doors, foes and a boss; portrait or landscape |
 | **Dino** | Runner | `Tap R` jump · `Hold L` duck / fast-fall | Leap cacti and duck under birds |
 | **Dodge** | Arcade | `Hold L / R` move | Survive changing bullet patterns; skim bullets for graze points; one hit |
 | **Doodle** | Runner | `Hold L / R` steer left/right | Bounce upward on platforms; cyan moves, yellow boosts |
@@ -150,7 +152,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 | **Lights** | Puzzle | `Tap L` next cell · `Hold L` next row · `Tap R` toggle | Lights Out 5×5: switch every light off within the move limit |
 | **Lunar** | Runner | `Hold L / R` push left/right · `L + R` main thrust | Land softly on the flat green pad before fuel runs out |
 | **Math** | Skill | `Tap L` false · `Tap R` true | Judge equations before the timer bar empties; 3 lives |
-| **Maze** | Arcade | `Tap L / R` turn left/right · `Hold L / R` U-turn | Eat all dots & power pellets, dodge ghosts; 3 lives |
+| **Maze** | Arcade | `Tap L` left / up · `Tap R` right / down (the turn waits for the next opening, shown by an arrow) · `Hold L / R` U-turn | Eat every dot while dodging the ghosts; power pellets let you eat them; 3 lives |
 | **Memory** | Puzzle | `Tap L` next card · `Tap R` flip card | Match all 8 pairs within limited tries |
 | **Meteors** | Arcade | `Hold L / R` rotate · `L + R` thrust (auto-fire) | Blast splitting asteroids in wrap-around space; 3 lives |
 | **Mines** | Puzzle | `Tap L` cell · `Hold L` row · `Tap R` reveal · `Hold R` flag | Clear minefields without hitting a mine |
@@ -158,6 +160,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 | **Pinball** | Arcade | `Hold L / R` flippers · `Hold & release R` launch | Hit bumpers, drop targets & top lanes (up to 5x); 3 balls |
 | **Plinko** | Skill | `Tap L / R` drop ball · `Hold L / R` nudge balls | 12 balls through a peg board; the 100 slot gives a free ball |
 | **Pong 2P** | Arcade | `Tap L` P1 flip dir · `Tap R` P2 flip dir | Local 2-player Pong on one board (first to 5; best = max rally) |
+| **Pool** | Skill | `Hold L / R` aim · `Tap L / R` fine aim · `Hold L + R` power, release to shoot · title: `Tap L` 1/2 players | 1 player: clear the table in as few shots as you can; 2 players: 8-ball vs a friend (taking turns) or vs the CPU (Easy / Normal / Hard) |
 | **Pop** | Puzzle | `Tap L` next tile · `Hold L` next row · `Tap R` pop group | Pop groups of 2+ same tiles; bigger groups score much more |
 | **Race** | Runner | `Hold L / R` steer | Dodge traffic on a winding road; grass slows you down |
 | **Reversi** | Puzzle | `Tap L` next move · `Hold L` previous · `Tap R` place | Othello-style vs the CPU; score = your discs (+30 for a win) |
@@ -181,7 +184,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 
 ---
 
-## 🛠️ Pocket Apps (10)
+## 🛠️ Pocket Apps (12)
 
 > 🦀 *"Not everything is a game. Some things are a game with a clock."*
 
@@ -190,11 +193,13 @@ Sorted alphabetically, as in the **Apps** list on the device.
 | App | Controls | Description |
 |---|---|---|
 | **Breathe** | `Tap L` pattern · `Tap R` start / pause · `Hold L` back | Guided breathing (Box 4-4-4-4, Relax 4-7-8, Calm 5-5) with an animated circle |
+| **Comp.** | `Tap R` QR code / address · `Hold L` back | Companion: QR code to the companion web page and the Bluetooth link; shows the progress when the phone installs the Big Games |
 | **Clock** | `Tap L` next time zone · `Tap R` digital / analog · `Hold L` back | Time from NTP over WiFi (or from your phone via Bluetooth); default zone Europe/Zurich |
 | **Dice** | `Tap L` mode · `Tap R` roll · `Hold L` back | 1–5 dice with total, coin flip, D20, 1–100 or yes/no (mode is remembered) |
 | **Minute** | `Tap L` preset / +1 min / reset · `Tap R` start / pause · `Hold L` back | Countdown (1–60 min presets); the screen flashes at full brightness when time is up |
 | **Morse** | `Tap L` dot · `Tap R` dash · `Hold R` delete · `Hold L` back | Morse keyer: decodes what you tap, with a live cheat sheet of matching letters |
 | **Remote** | `Hold L + R` switch mode (Camera / Music / Slides) · `Hold L` back | Bluetooth remote for iPhone & Android, no app (see below) |
+| **Support** | `Tap L` Tigo cheers · `Tap R` big QR · `Hold L` back | QR code to [Buy Me a Coffee](https://buymeacoffee.com/zcnxsnw3vw); TTGO-Arcade is free, donations are optional |
 | **Tally** | `Tap L` A +1 · `Tap R` B +1 · `Hold R` undo · `Hold L + R` reset · `Hold L` back | Two-player score counter, saved across sleep and power-off |
 | **Tigo** | `Tap L` feed · `Tap R` play · `Hold R` clean · `Hold L` back | Look after Tigo: hunger, fun and clean bars; shells unlock from your high scores |
 | **Timer** | `Tap R` start/stop · `Tap L` lap/reset · `Hold L` back | Precision stopwatch with up to 5 lap splits |
@@ -283,6 +288,19 @@ Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it d
 ---
 
 ---
+
+## 🎮 Big Games cartridge & automatic updates
+
+> 🦀 *"Some games are too big for my shell. I keep them in a second one!"*
+
+The launcher holds the light games, the apps and the settings. The heavy games (**Abyx**, **Crypt**) live in a separate **Big Games cartridge** stored in the board's second app slot. Until it is installed they show greyed with **Download** in the Games list. Select one to see the download size, free space and battery, then get it:
+
+- **over WiFi**: HTTPS from GitHub Pages, SHA-256 checked;
+- **from your phone**: scan the QR code (Apps → Comp.) to open the [companion page](https://iyotee.github.io/TTGO-Arcade/companion.html), tap **Connect**, then **Install** (Chrome on Android / desktop).
+
+Once installed the game shows **Ready**. Starting it reboots into the cartridge (about 2 s); leaving the game reboots back into the launcher. Scores and settings are shared. A reset, crash or sleep inside the cartridge always lands back in the launcher.
+
+**Updates**: while WiFi is connected the launcher checks [fw/manifest.json](https://iyotee.github.io/TTGO-Arcade/fw/manifest.json) every hour (never during a game; switch it off in Settings → Updates). A newer launcher shows a badge and **Update available**; installing asks for confirmation and needs more than 30 % battery or USB power. A launcher update (or a PC upload through OTA update) uses the cartridge's slot, so the Big Games have to be downloaded again afterwards. Local builds are build 0 and never ask to update. Every push to `main` is built by GitHub Actions ([build.yml](.github/workflows/build.yml)) and published to GitHub Pages together with the companion page.
 
 ## 📡 OTA updates
 

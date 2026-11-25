@@ -9,6 +9,7 @@
 #include "common.h"
 #include "power.h"
 #include "lockscr.h"
+#include "ble.h"
 #include "esp_sleep.h"
 
 #define ADC_EN_PIN  14                // switches the battery voltage divider on
@@ -107,6 +108,9 @@ bool onUsbPower(int mv) { return mv >= 4350; }
 
 // ---------------- sleep ----------------
 void goToSleep() {
+#if !TTGO_CARTRIDGE
+  if (bleInstallActive()) return;      // the phone is writing a cartridge: stay awake
+#endif
   if (!saverDelayMs()) { deepSleepNow(); return; }
 
   dbg("screensaver\n");

@@ -6,11 +6,15 @@
 //   Hold L + R      : charge the power (the meter swings up and down),
 //                     release to shoot
 //   Ball in hand    : L / R slide the cue ball, press L + R to put it down
-// Title: Tap L = 1 or 2 players, Tap R = start.
+// Title: Tap L = 1 or 2 players, Tap R = start (1 player) or next (2 players).
+// Opponent menu (2 players): Tap L = next entry, Tap R = pick
+//   (vs Friend, vs CPU Easy / Normal / Hard, Back).
 // 1 player: pot all 15 balls in as few shots (and as little time) as you can.
 // 2 players, taking turns: simplified 8-ball. The first legal pot gives that
 // player solids or stripes; pot your group, then the 8. A scratch hands the
 // other player the cue ball behind the head string; the 8 sunk early loses.
+// vs CPU: you are player 1 and break; the CPU plays player 2 by the same rules,
+// trying its candidate shots on a copy of the table with the real physics.
 
 #include "common.h"
 #include "themeui.h"
@@ -79,6 +83,16 @@ static State state = TITLE;
 static Phase phase = PH_PLACE;
 
 static bool twoPlayers = false;
+static int cpuLevel = 0;                                      // 2 players: 0 = vs Friend, 1..3 = CPU Easy / Normal / Hard
+static int titleStage = 0, oppSel = 0;                        // title: 0 = 1 / 2 players, 1 = opponent menu
+static const int NUM_OPP = 5;                                 // Friend, Easy, Normal, Hard, Back
+static const char *const CPU_LV_NAME[3] = {"Easy", "Normal", "Hard"};
+
+// CPU turn: (ball in hand) slide the cue ball, think, turn the cue, charge, shoot
+enum CpuStage { CP_IDLE, CP_PLACE, CP_THINK, CP_TURN, CP_POWER };
+static CpuStage cpuStage = CP_IDLE;
+static int cpuT = 0;                                          // ticks in the current stage
+static float cpuAim = 0, cpuPower = 0, cpuPlaceX = TBL_MX;
 static float aim = -PI / 2, power = 0, placeX = TBL_MX;
 static bool charging = false, waitRelease = false;
 static int powerT = 0, holdTL = 0, holdTR = 0, animT = 0;
@@ -94,6 +108,8 @@ static uint8_t group[2];                                      // 0 = open, 1 = s
 static const char *endWhy = "";
 static int shots = 0;
 static uint32_t playTicks = 0;
+static bool vsCpu() { return twoPlayers && cpuLevel > 0; }
+static bool cpuTurn() { return vsCpu() && cur == 1; }              // the CPU is always player 2
 
 // banner across the table
 static const char *banTxt = nullptr, *banSub = nullptr;
@@ -347,7 +363,9 @@ static void newGame() {
   banT = 0;
   aim = -PI / 2;
   startPlace();
-  if (twoPlayers) banner("PLAYER 1", "to break", TFT_YELLOW);
+  cpuStage = CP_IDLE;
+  if (vsCpu()) banner("YOU", "to break", TFT_YELLOW);
+  else if (twoPlayers) banner("PLAYER 1", "to break", TFT_YELLOW);
   state = PLAY;
   lastTick = millis();
   dirty = true;
@@ -435,17 +453,22 @@ static void endShotDuo() {
 
   static char sub[24];
   if (!keep) cur = other;
+  bool cpu = vsCpu();
   if (scratch) {
-    snprintf(sub, sizeof sub, "P%d: ball in hand", cur + 1);
+    if (cpu) snprintf(sub, sizeof sub, "%s: ball in hand", cur ? "CPU" : "You");
+    else snprintf(sub, sizeof sub, "P%d: ball in hand", cur + 1);
     banner("SCRATCH", sub, TFT_RED);
   } else if (foul) {
-    snprintf(sub, sizeof sub, "%s: P%d plays", why, cur + 1);
+    if (cpu) snprintf(sub, sizeof sub, "%s: %s", why, cur ? "CPU plays" : "you play");
+    else snprintf(sub, sizeof sub, "%s: P%d plays", why, cur + 1);
     banner("FOUL", sub, TFT_ORANGE);
   } else if (assigned) {
-    snprintf(sub, sizeof sub, "for Player %d", me + 1);
+    if (cpu) snprintf(sub, sizeof sub, "%s", me ? "for the CPU" : "for you");
+    else snprintf(sub, sizeof sub, "for Player %d", me + 1);
     banner(group[me] == 1 ? "SOLIDS" : "STRIPES", sub, TFT_YELLOW);
   } else if (!keep) {
-    banner(cur ? "PLAYER 2" : "PLAYER 1", "your turn", cur ? TFT_CYAN : TFT_YELLOW);
+    if (cpu) banner(cur ? "CPU" : "YOU", cur ? "its turn" : "your turn", cur ? TFT_CYAN : TFT_YELLOW);
+    else banner(cur ? "PLAYER 2" : "PLAYER 1", "your turn", cur ? TFT_CYAN : TFT_YELLOW);
   }
   if (scratch) startPlace();
   else startAim();
@@ -457,8 +480,11 @@ static void endShot() {
   breakShot = false;
 }
 
+// cue ball speed for a power of 0..1 (fine control at the soft end)
+static float shotSpeed(float p) { return MIN_SHOT + (MAX_SHOT - MIN_SHOT) * (0.4f * p + 0.6f * p * p); }
+
 static void shoot() {
-  float p = power, spd = MIN_SHOT + (MAX_SHOT - MIN_SHOT) * (0.4f * p + 0.6f * p * p);
+  float p = power, spd = shotSpeed(p);
   Ball &c = balls[0];
   c.vx = cosf(aim) * spd;
   c.vy = sinf(aim) * spd;
@@ -467,13 +493,27 @@ static void shoot() {
   scratch = false;
   shots++;
   phase = PH_ROLL;
+  cpuStage = CP_IDLE;
   dbg("pool: shot %d power %d%%", shots, (int)(p * 100));
 }
 
 // ---------------- physics ----------------
+// The CPU plays its candidate shots out on balls[] itself (swapped in and out
+// within one call, so nothing ever draws a simulated table); while
+// `simulating` the shot notes go to `so` and nothing visual is touched.
+struct SimLog { int firstHit, firstPot; uint16_t potted; bool scratch; };
+static SimLog so;
+static bool simulating = false;
+
 static void pot(int i, int k) {
   Ball &b = balls[i];
   b.on = false;
+  if (simulating) {
+    so.potted |= 1 << i;
+    if (i == 0) so.scratch = true;
+    else if (i != 8 && so.firstPot < 0) so.firstPot = i;
+    return;
+  }
   if (nDrops < 16) {
     Drop &d = drops[nDrops++];
     d.id = i; d.pk = k; d.t = 0; d.x = b.x; d.y = b.y;
@@ -500,8 +540,11 @@ static void collideBalls() {
         a.vx -= imp * nx; a.vy -= imp * ny;
         b.vx += imp * nx; b.vy += imp * ny;
         if (i == 0) { a.vx += FOLLOW * vrel * nx; a.vy += FOLLOW * vrel * ny; }
-        if (i == 0 && firstHit < 0) firstHit = j;
-        if (breakShot && !breakShown && i == 0) {
+        if (i == 0) {
+          int &fh = simulating ? so.firstHit : firstHit;
+          if (fh < 0) fh = j;
+        }
+        if (!simulating && breakShot && !breakShown && i == 0) {
           breakShown = true;
           if (vrel > 3) banner("BREAK!", nullptr, TFT_WHITE);
         }
@@ -579,7 +622,7 @@ static void physicsTick() {
   for (int i = 0; i < 16; i++) {
     Ball &b = balls[i];
     if (!b.on) continue;
-    roll(b, b.x - ox[i], b.y - oy[i]);
+    if (!simulating) roll(b, b.x - ox[i], b.y - oy[i]);    // looks only: the look-ahead skips it
     float v = sqrtf(b.vx * b.vx + b.vy * b.vy);
     if (v < 1e-6f) continue;
     float nv = v * FRICT_MUL - FRICT_SUB;
@@ -593,6 +636,431 @@ static bool allStill() {
   if (nDrops) return false;
   for (int i = 0; i < 16; i++) if (balls[i].on && (balls[i].vx != 0 || balls[i].vy != 0)) return false;
   return true;
+}
+
+// ---------------- CPU opponent ----------------
+// Each turn the CPU lists candidate shots from the table's geometry (ghost-ball
+// pots on every pocket, a few one-cushion banks, soft safe hits, random tries),
+// then plays each one out with the real physics on a copy of the table, a few
+// ms per frame, and scores the outcome by the 8-ball rules: its balls potted,
+// no scratch or foul, a good next shot left for itself (or a bad one for you).
+// Normal and Hard replay the best three slightly off-aim, which weeds out shots
+// that only work when perfect. The chosen shot then gets the level's error.
+
+struct CpuLv { float aimErr, powErr, posW, safeW; int topN, minThink; bool verify; };
+static const CpuLv CPU_LV[3] = {
+  {0.030f, 0.16f, 0.25f, 0.0f, 5, 34, false},                // Easy: sloppy, barely plans ahead
+  {0.010f, 0.07f, 1.0f, 0.5f, 10, 40, true},                 // Normal
+  {0.0035f, 0.03f, 1.0f, 1.0f, 16, 40, true},                // Hard: steady hand, plays position and safe
+};
+static const uint32_t CPU_BUDGET_US = 3000;                   // search time per frame: the frame stays smooth
+static const int CPU_MAX_THINK = 190;                         // ticks (~3 s): then it plays the best found so far
+static const int SIM_MAX_T = 420;                             // a full-power shot settles in ~280 ticks
+
+static const float MOUTH[6][2] = {                            // direction into each pocket
+  {-0.7071f, -0.7071f}, {0.7071f, -0.7071f}, {-1, 0}, {1, 0}, {-0.7071f, 0.7071f}, {0.7071f, 0.7071f},
+};
+static const float BANK_LINE[4] = {TBL_L + BALL_R, TBL_R - BALL_R, TBL_T + BALL_R, TBL_B - BALL_R};  // ball centre at a cushion
+
+static inline float sqr2(float v) { return v * v; }      // (Arduino has an sqr2() macro)
+static float wrapPi(float a) {
+  while (a > PI) a -= 2 * PI;
+  while (a < -PI) a += 2 * PI;
+  return a;
+}
+static float gauss() { return (rnd(1000) + rnd(1000) + rnd(1000)) / 500.0f - 3.0f; }   // ~N(0, 1)
+
+static bool legalFor(int g, int id) {
+  if (!g) return id != 8;
+  if (groupLeft(g) == 0) return id == 8;
+  return groupOf(id) == g;
+}
+
+// no ball (but a and b) within a ball's width of the segment
+static bool laneClear(float x0, float y0, float x1, float y1, int a, int b) {
+  float ex = x1 - x0, ey = y1 - y0, l2 = ex * ex + ey * ey;
+  if (l2 < 1e-4f) return true;
+  for (int i = 0; i < 16; i++) {
+    if (i == a || i == b || !balls[i].on) continue;
+    float t = constrain(((balls[i].x - x0) * ex + (balls[i].y - y0) * ey) / l2, 0.0f, 1.0f);
+    if (sqr2(x0 + ex * t - balls[i].x) + sqr2(y0 + ey * t - balls[i].y) < sqr2(2 * BALL_R - 0.3f)) return false;
+  }
+  return true;
+}
+
+// a ball rolling along (ux, uy) can drop: side pockets only take a flat approach
+static bool mouthOk(int k, float ux, float uy) {
+  return ux * MOUTH[k][0] + uy * MOUTH[k][1] > (k == 2 || k == 3 ? 0.72f : 0.5f);
+}
+
+struct Geo { float ease, aim, cosc, d1, d2; };               // ease: 0 = hopeless .. ~1 = hanging over the hole
+
+// Ghost ball: to send ball t towards (px, py) the cue ball must touch it at
+// G = T - 2R u. Rates the cut and the distances; a blocked cue path counts little.
+static bool ghostShot(float cx, float cy, int t, float px, float py, Geo &g) {
+  const Ball &o = balls[t];
+  float ux = px - o.x, uy = py - o.y, d2 = sqrtf(ux * ux + uy * uy);
+  if (d2 < 1) return false;
+  ux /= d2; uy /= d2;
+  float gx = o.x - ux * 2 * BALL_R, gy = o.y - uy * 2 * BALL_R;
+  if (gx < TBL_L + BALL_R - 0.5f || gx > TBL_R - BALL_R + 0.5f || gy < TBL_T + BALL_R - 0.5f || gy > TBL_B - BALL_R + 0.5f) return false;
+  float wx = gx - cx, wy = gy - cy, d1 = sqrtf(wx * wx + wy * wy);
+  if (d1 < 0.5f) return false;
+  wx /= d1; wy /= d1;
+  float c = wx * ux + wy * uy;
+  if (c < 0.15f) return false;                                // thinner than ~80 degrees: forget it
+  g.aim = atan2f(wy, wx);
+  g.cosc = c;
+  g.d1 = d1;
+  g.d2 = d2;
+  g.ease = c * c / (1 + d1 / 240 + d2 / 170);
+  if (!laneClear(cx, cy, gx, gy, 0, t)) g.ease *= 0.12f;
+  return true;
+}
+
+static void pocketAim(int k, float &x, float &y) {             // a little inside the hole's centre
+  x = POCKETS[k].x - MOUTH[k][0] * 2;
+  y = POCKETS[k].y - MOUTH[k][1] * 2;
+}
+
+static bool potGeo(float cx, float cy, int t, int k, Geo &g) {
+  float px, py;
+  pocketAim(k, px, py);
+  if (!ghostShot(cx, cy, t, px, py, g)) return false;
+  const Ball &o = balls[t];
+  if (!mouthOk(k, (px - o.x) / g.d2, (py - o.y) / g.d2)) return false;
+  if (!laneClear(o.x, o.y, px, py, 0, t)) g.ease *= 0.1f;
+  return true;
+}
+
+// one-cushion bank: aim the object ball at the pocket mirrored across cushion m
+static bool bankGeo(float cx, float cy, int t, int k, int m, Geo &g) {
+  float px, py;
+  pocketAim(k, px, py);
+  bool vert = m < 2;
+  float L = BANK_LINE[m];
+  if ((vert ? fabsf(px - L) : fabsf(py - L)) < 25) return false;   // the pocket is on that cushion
+  const Ball &o = balls[t];
+  if ((vert ? fabsf(o.x - L) : fabsf(o.y - L)) < 8) return false;  // frozen on it
+  float mx = vert ? 2 * L - px : px, my = vert ? py : 2 * L - py;
+  if (!ghostShot(cx, cy, t, mx, my, g)) return false;
+  float ux = (mx - o.x) / g.d2, uy = (my - o.y) / g.d2;
+  if (fabsf(vert ? ux : uy) < 1e-3f) return false;
+  float s = vert ? (L - o.x) / ux : (L - o.y) / uy;
+  if (s <= 0 || s >= g.d2) return false;
+  float bx = o.x + ux * s, by = o.y + uy * s;                 // where it meets the cushion
+  if (vert ? (by < TBL_T + 10 || by > TBL_B - 10 || fabsf(by - 128) < 12) : (bx < TBL_L + 10 || bx > TBL_R - 10)) return false;
+  float ax = px - bx, ay = py - by, al = sqrtf(ax * ax + ay * ay);
+  if (al < 1 || !mouthOk(k, ax / al, ay / al)) return false;
+  if (!laneClear(o.x, o.y, bx, by, 0, t) || !laneClear(bx, by, px, py, 0, t)) return false;
+  g.ease *= 0.4f;                                             // the cushion is never quite true
+  return true;
+}
+
+// best pot chance for a player of group g with the cue ball at (cx, cy)
+static float bestEase(float cx, float cy, int g) {
+  float best = 0;
+  Geo geo;
+  for (int t = 1; t < 16; t++) {
+    if (!balls[t].on || !legalFor(g, t)) continue;
+    for (int k = 0; k < 6; k++)
+      if (potGeo(cx, cy, t, k, geo) && geo.ease > best) best = geo.ease;
+  }
+  return best;
+}
+
+// speed a ball needs now to still have vEnd after rolling dist px (the friction run backwards)
+static float speedToReach(float dist, float vEnd) {
+  float v = max(vEnd, STOP_V), d = 0;
+  for (int i = 0; i < 600 && d < dist; i++) {
+    v = (v + FRICT_SUB) / FRICT_MUL;
+    d += v;
+  }
+  return v;
+}
+static float powerFor(float spd) {                            // shotSpeed() inverted
+  float q = (spd - MIN_SHOT) / (MAX_SHOT - MIN_SHOT);
+  if (q <= 0) return 0;
+  return constrain((-0.4f + sqrtf(0.16f + 2.4f * q)) / 1.2f, 0.0f, 1.0f);
+}
+// enough power for the object ball to roll `extra` px past the pocket
+static float potPower(const Geo &g, float extra, bool bank) {
+  float vo = speedToReach(g.d2 + extra, STOP_V) * (bank ? 1.4f : 1.0f);
+  float vi = vo / (g.cosc * (1 + E_BALL) / 2);               // only the normal part of the cue's speed passes on
+  return powerFor(speedToReach(g.d1, vi));
+}
+
+// ---- search state ----
+struct Opt { Geo g; bool bank; };
+struct Cand { float aim, power; };
+struct Job { int8_t c; float dAim; };
+static const int MAX_CAND = 72, MAX_JOBS = MAX_CAND + 6;
+static Cand cand[MAX_CAND];
+static float cSum[MAX_CAND];
+static uint8_t cN[MAX_CAND];
+static Job jobs[MAX_JOBS];
+static int nCand = 0, nJobs = 0, jobAt = 0, simT = 0, nSims = 0;
+static bool simBusy = false, searchDone = false, verifyQueued = false;
+static int ctxGroup = 0;
+static bool ctxOnEight = false;
+static uint32_t thinkUs = 0;
+static Ball simBalls[16], saveBalls[16];
+
+static const CpuLv &cpuLv() { return CPU_LV[constrain(cpuLevel, 1, 3) - 1]; }
+
+static void addCand(float a, float p) {
+  if (nCand >= MAX_CAND) return;
+  cand[nCand].aim = wrapPi(a);
+  cand[nCand].power = constrain(p, 0.08f, 1.0f);
+  cSum[nCand] = 0;
+  cN[nCand] = 0;
+  jobs[nJobs].c = nCand;
+  jobs[nJobs].dAim = 0;
+  nJobs++;
+  nCand++;
+}
+
+// keeps the `limit` easiest shots, easiest first
+static void keepOpt(Opt *list, int &n, int limit, const Geo &g, bool bank) {
+  if (n == limit && list[n - 1].g.ease >= g.ease) return;
+  int i = n < limit ? n++ : limit - 1;
+  while (i > 0 && list[i - 1].g.ease < g.ease) { list[i] = list[i - 1]; i--; }
+  list[i].g = g;
+  list[i].bank = bank;
+}
+
+static void planShots() {
+  const CpuLv &lv = cpuLv();
+  const Ball &c = balls[0];
+  int g = group[1];
+  static Opt pots[16], banks[3];
+  int nPot = 0, nBank = 0;
+  nCand = nJobs = jobAt = nSims = 0;
+  Geo geo;
+  for (int t = 1; t < 16; t++) {
+    if (!balls[t].on || !legalFor(g, t)) continue;
+    for (int k = 0; k < 6; k++) {
+      if (potGeo(c.x, c.y, t, k, geo)) keepOpt(pots, nPot, lv.topN, geo, false);
+      for (int m = 0; m < 4; m++)
+        if (bankGeo(c.x, c.y, t, k, m, geo)) keepOpt(banks, nBank, 3, geo, true);
+    }
+  }
+  // the likeliest pots first, so they get played out even if time runs short
+  for (int i = 0; i < nPot; i++) addCand(pots[i].g.aim, potPower(pots[i].g, 25, false));
+  for (int i = 0; i < nBank; i++) addCand(banks[i].g.aim, potPower(banks[i].g, 30, true));
+  // safe hits: full on each legal ball, softly
+  for (int t = 1; t < 16; t++)
+    if (balls[t].on && legalFor(g, t)) addCand(atan2f(balls[t].y - c.y, balls[t].x - c.x), 0.22f + rnd(20) / 100.0f);
+  // firmer versions of the pots (Easy does not bother)
+  if (cpuLevel > 1)
+    for (int e = 0; e < 2; e++)
+      for (int i = 0; i < nPot; i++) addCand(pots[i].g.aim, potPower(pots[i].g, e ? 170 : 80, false));
+  // a few random tries near legal balls: kicks and lucky angles
+  int legal[15], nl = 0;
+  for (int t = 1; t < 16; t++) if (balls[t].on && legalFor(g, t)) legal[nl++] = t;
+  for (int r = 0; r < 5 && nl; r++) {
+    const Ball &o = balls[legal[rnd(nl)]];
+    addCand(atan2f(o.y - c.y, o.x - c.x) + (rnd(51) - 25) / 100.0f, 0.2f + rnd(70) / 100.0f);
+  }
+  if (!nCand) addCand(aim, 0.5f);                             // nothing legal left to aim at: just hit it
+}
+
+static void startThink() {
+  ctxGroup = group[1];
+  ctxOnEight = ctxGroup && groupLeft(ctxGroup) == 0;
+  uint32_t t0 = micros();
+  planShots();
+  thinkUs = micros() - t0;
+  simBusy = searchDone = verifyQueued = false;
+  waitRelease = false;                                        // show the aim guide while it works
+  charging = false;
+  cpuStage = CP_THINK;
+  cpuT = 0;
+}
+
+// scores the simulated outcome (balls[] holds the simulated table), CPU's view
+static float evalSim() {
+  const CpuLv &lv = cpuLv();
+  int g = ctxGroup;
+  bool foul = so.scratch;
+  if (!foul && so.firstHit < 0) foul = true;
+  else if (!foul && g && (ctxOnEight ? so.firstHit != 8 : groupOf(so.firstHit) != g)) foul = true;
+  else if (!foul && !g && so.firstHit == 8 && !breakShot) foul = true;
+  if ((so.potted >> 8 & 1) && !breakShot) return ctxOnEight && !foul ? 100000.0f : -100000.0f;
+  int ng = g;
+  if (!g && !foul && so.firstPot > 0) ng = groupOf(so.firstPot);
+  int mine = 0, theirs = 0;
+  for (int i = 1; i < 16; i++)
+    if ((so.potted >> i & 1) && i != 8 && ng) (groupOf(i) == ng ? mine : theirs)++;
+  float s = rnd(100) * 0.05f;                                 // tie-break
+  if (so.scratch) s -= 600;                                   // you would get ball in hand
+  else if (foul) s -= 300;
+  else s += 120 * mine - 30 * theirs;
+  if (!foul && mine > 0) s += 300 + lv.posW * 250 * bestEase(balls[0].x, balls[0].y, ng);
+  else if (!so.scratch) s -= lv.safeW * 200 * bestEase(balls[0].x, balls[0].y, ng ? 3 - ng : 0);
+  return s;
+}
+
+static bool simStill() {
+  for (int i = 0; i < 16; i++) if (balls[i].on && (balls[i].vx != 0 || balls[i].vy != 0)) return false;
+  return true;
+}
+
+// the best three again, aimed off by the level's typical error either way
+static void queueVerify() {
+  const CpuLv &lv = cpuLv();
+  if (verifyQueued || !lv.verify) { searchDone = true; return; }
+  verifyQueued = true;
+  int top[3] = {-1, -1, -1};
+  for (int c = 0; c < nCand; c++) {
+    if (!cN[c]) continue;
+    for (int k = 0; k < 3; k++)
+      if (top[k] < 0 || cSum[c] > cSum[top[k]]) {
+        for (int m = 2; m > k; m--) top[m] = top[m - 1];
+        top[k] = c;
+        break;
+      }
+  }
+  for (int k = 0; k < 3; k++)
+    for (int sgn = -1; sgn <= 1 && top[k] >= 0; sgn += 2)
+      if (nJobs < MAX_JOBS) {
+        jobs[nJobs].c = top[k];
+        jobs[nJobs].dAim = sgn * lv.aimErr * 1.5f;
+        nJobs++;
+      }
+  if (jobAt >= nJobs) searchDone = true;
+}
+
+// plays candidate shots out for at most budgetUs, picking up where it stopped
+static void cpuSearch(uint32_t budgetUs) {
+  uint32_t t0 = micros();
+  while (!searchDone && (int32_t)(micros() - t0) < (int32_t)budgetUs) {
+    if (jobAt >= nJobs) { queueVerify(); continue; }
+    const Job &jb = jobs[jobAt];
+    if (!simBusy) {
+      memcpy(simBalls, balls, sizeof balls);
+      float a = cand[jb.c].aim + jb.dAim, spd = shotSpeed(cand[jb.c].power);
+      simBalls[0].vx = cosf(a) * spd;
+      simBalls[0].vy = sinf(a) * spd;
+      so.firstHit = so.firstPot = -1;
+      so.potted = 0;
+      so.scratch = false;
+      simT = 0;
+      simBusy = true;
+    }
+    memcpy(saveBalls, balls, sizeof balls);
+    memcpy(balls, simBalls, sizeof balls);
+    simulating = true;
+    bool done = false;
+    do {
+      physicsTick();
+      simT++;
+      // a scratch or an early 8 already settles the verdict
+      done = simT >= SIM_MAX_T || so.scratch || ((so.potted >> 8 & 1) && !breakShot) || simStill();
+    } while (!done && (int32_t)(micros() - t0) < (int32_t)budgetUs);
+    float sc = done ? evalSim() : 0;
+    simulating = false;
+    memcpy(simBalls, balls, sizeof balls);
+    memcpy(balls, saveBalls, sizeof balls);
+    if (done) {
+      cSum[jb.c] += sc;
+      cN[jb.c]++;
+      simBusy = false;
+      jobAt++;
+      nSims++;
+    }
+  }
+  thinkUs += micros() - t0;
+}
+
+// picks the best average among the most-tested shots, then adds the level's error
+static void finishThink() {
+  const CpuLv &lv = cpuLv();
+  int maxN = 0, best = 0;
+  for (int c = 0; c < nCand; c++) maxN = max(maxN, (int)cN[c]);
+  float bs = -1e9f;
+  for (int c = 0; c < nCand && maxN; c++)
+    if (cN[c] == maxN && cSum[c] / maxN > bs) { bs = cSum[c] / maxN; best = c; }
+  cpuAim = wrapPi(cand[best].aim + gauss() * lv.aimErr);
+  float p = cand[best].power * (1 + gauss() * lv.powErr);   // not inside constrain(): it is a macro
+  cpuPower = constrain(p, 0.06f, 1.0f);
+  dbg("pool cpu: %d shots, %d sims, %lu ms cpu, pick %d (%d), power %d%%", nCand, nSims,
+      (unsigned long)(thinkUs / 1000), best, (int)bs, (int)(cpuPower * 100));
+  cpuStage = CP_TURN;
+  cpuT = 0;
+}
+
+// ball in hand: the spot on the line with the easiest pot
+static void planPlace() {
+  float bestS = -1, bx = placeX;
+  for (float x = TBL_L + BALL_R + 1; x <= TBL_R - BALL_R - 1; x += 3) {
+    if (!spotFree(x, PLACE_Y, 0)) continue;
+    float s = bestEase(x, PLACE_Y, group[1]) + (cpuLevel == 1 ? rnd(100) / 250.0f : 0);
+    if (s > bestS) { bestS = s; bx = x; }
+  }
+  cpuPlaceX = bx;
+}
+
+static void cpuTick() {
+  if (cpuStage == CP_IDLE) {
+    if (phase == PH_PLACE) {
+      planPlace();
+      cpuStage = CP_PLACE;
+      cpuT = 0;
+    } else {
+      startThink();
+    }
+    return;
+  }
+  switch (cpuStage) {
+    case CP_PLACE: {                                          // slide the cue ball there, then put it down
+      float d = cpuPlaceX - placeX;
+      if (fabsf(d) > 0.6f) {
+        placeX += constrain(d, -1.6f, 1.6f);
+        cpuT = 0;
+      } else {
+        placeX = cpuPlaceX;
+        if (++cpuT >= 18) {
+          startAim();
+          cpuStage = CP_IDLE;                                 // the next tick starts thinking
+        }
+      }
+      balls[0].x = placeX;
+      balls[0].y = PLACE_Y;
+      break;
+    }
+    case CP_THINK:
+      cpuT++;
+      if ((searchDone && cpuT >= cpuLv().minThink) || cpuT >= CPU_MAX_THINK) finishThink();
+      break;
+    case CP_TURN: {                                           // swing the cue round, slowing near the end
+      float d = wrapPi(cpuAim - aim);
+      if (fabsf(d) > 0.0015f) {
+        float st = constrain(fabsf(d) * 0.1f, 0.004f, 0.045f);
+        aim = wrapPi(aim + (d > 0 ? min(st, d) : max(-st, d)));
+        cpuT = 0;
+      } else {
+        aim = cpuAim;
+        if (++cpuT >= 22) {
+          cpuStage = CP_POWER;
+          cpuT = 0;
+          charging = true;
+          power = 0;
+        }
+      }
+      break;
+    }
+    case CP_POWER:                                            // the meter climbs as fast as a player's would
+      if (power < cpuPower) {
+        power = min(cpuPower, power + 2.0f / POWER_PERIOD);
+      } else if (++cpuT >= 12) {
+        charging = false;
+        shoot();
+      }
+      break;
+    default:
+      break;
+  }
 }
 
 // ---------------- input ----------------
@@ -670,6 +1138,8 @@ static void tick(uint32_t now, int eL, int eR) {
   if (phase == PH_ROLL) {
     physicsTick();
     if (allStill()) endShot();
+  } else if (cpuTurn()) {
+    cpuTick();                                                // your buttons do nothing meanwhile
   } else {
     handleInput(now, eL, eR);
   }
@@ -943,7 +1413,8 @@ static void drawHud() {
     uint16_t col = act ? (p ? TFT_CYAN : TFT_YELLOW) : th.textDim;
     spr.setTextDatum(TL_DATUM);
     spr.setTextColor(col);
-    spr.drawString(p ? "P2" : "P1", x0 + 1, 1, 2);
+    if (vsCpu()) spr.drawString(p ? "CPU" : "YOU", x0 + 1, 5, 1);   // font 1 leaves room for the balls
+    else spr.drawString(p ? "P2" : "P1", x0 + 1, 1, 2);
     if (act) spr.fillRect(x0, 15, 64, 2, col);
     int g = group[p];
     if (!g) {
@@ -985,7 +1456,15 @@ static void drawBanner() {
 
 static void drawHint() {
   const char *t = nullptr;
-  if (phase == PH_PLACE) t = "L/R move   L+R place";
+  if (cpuTurn()) {
+    static char buf[20];
+    if (cpuStage == CP_THINK) {
+      snprintf(buf, sizeof buf, "CPU thinking%.*s", (animT / 10) % 4, "...");
+      t = buf;
+    } else if (phase == PH_PLACE) {
+      t = "CPU places the ball";
+    }
+  } else if (phase == PH_PLACE) t = "L/R move   L+R place";
   else if (phase == PH_AIM && shots == 0) t = charging ? "release to shoot" : "L/R aim   L+R power";
   if (!t) return;
   spr.setTextDatum(TC_DATUM);
@@ -1006,10 +1485,18 @@ static void drawDuoOver() {
   }
   spr.setTextDatum(TC_DATUM);
   spr.setTextColor(winner ? TFT_CYAN : TFT_YELLOW);
-  snprintf(buf, sizeof buf, "PLAYER %d", winner + 1);
-  spr.drawString(buf, 67, 97, 4);
-  spr.setTextColor(th.text);
-  spr.drawString("WINS!", 67, 122, 2);
+  if (vsCpu()) {
+    const char *t = winner ? "CPU WINS" : "YOU WIN";
+    spr.drawString(t, 67, 97, spr.textWidth(t, 4) <= 117 ? 4 : 2);
+    spr.setTextColor(th.text);
+    snprintf(buf, sizeof buf, "vs CPU (%s)", CPU_LV_NAME[constrain(cpuLevel, 1, 3) - 1]);
+    spr.drawString(buf, 67, 122, 2);
+  } else {
+    snprintf(buf, sizeof buf, "PLAYER %d", winner + 1);
+    spr.drawString(buf, 67, 97, 4);
+    spr.setTextColor(th.text);
+    spr.drawString("WINS!", 67, 122, 2);
+  }
   spr.setTextColor(themeSoft());
   spr.drawString(endWhy, 67, 140, 1);
   spr.setTextDatum(TL_DATUM);
@@ -1085,6 +1572,24 @@ static void drawTitle() {
   drawShadow(36, 64);
   drawBall(36, 64, 0, cue, az);
 
+  if (titleStage == 1) {                                      // 2 players: who plays player 2
+    static const char *const OPP[NUM_OPP] = {"vs Friend", "vs CPU  Easy", "vs CPU  Normal", "vs CPU  Hard", "Back"};
+    for (int m = 0; m < NUM_OPP; m++) {
+      int y = 99 + m * 22;
+      bool sel = m == oppSel;
+      drawSelBox(10, y, 115, 20, 4, sel);
+      spr.setTextDatum(MC_DATUM);
+      spr.setTextColor(sel ? th.text : th.textDim);
+      spr.drawString(OPP[m], 67, y + 10, 2);
+    }
+    spr.setTextDatum(TC_DATUM);
+    spr.setTextColor(themeSoft());
+    spr.drawString(oppSel == 0 ? "8-ball, take turns" : oppSel < 4 ? "you break, CPU is P2" : "back to 1 / 2 players",
+                   67, 211, 1);
+    drawThemedFooter("next", "select", 224);
+    return;
+  }
+
   // mode choice
   const char *modes[2] = {"1 Player", "2 Players"};
   for (int m = 0; m < 2; m++) {
@@ -1096,7 +1601,7 @@ static void drawTitle() {
     spr.drawString(modes[m], 67, y + 11, 2);
   }
   spr.setTextColor(themeSoft());
-  spr.drawString(twoPlayers ? "8-ball, take turns" : "clear the table", 67, 156, 1);
+  spr.drawString(twoPlayers ? "8-ball: a friend or the CPU" : "clear the table", 67, 156, 1);
 
   spr.setTextDatum(TL_DATUM);
   const char *keys[] = {"Hold L/R", "Tap L/R", "Hold L+R", "release"};
@@ -1111,7 +1616,7 @@ static void drawTitle() {
   spr.setTextColor(themeSoft());
   snprintf(buf, sizeof buf, "Best %lu (1 player)", (unsigned long)hiScore);
   spr.drawString(buf, 67, 210, 1);
-  drawThemedFooter("mode", "start", 224);
+  drawThemedFooter("mode", twoPlayers ? "next" : "start", 224);
 }
 
 static void render() {
@@ -1140,6 +1645,10 @@ void begin() {
   initTables();
   hiScore = prefs.getUInt("pool_hi", 0);
   twoPlayers = prefs.getUChar("pool_mode", 0) != 0;
+  int opp = prefs.getUChar("pool_opp", 0);
+  cpuLevel = constrain(opp, 0, 3);
+  titleStage = 0;
+  cpuStage = CP_IDLE;
   state = TITLE;
   armed = false;
   lastInput = millis();
@@ -1156,6 +1665,8 @@ void update(uint32_t now) {
   if (state == PLAY) {
     qL.push(eL);
     qR.push(eR);
+    // the CPU's look-ahead: a slice of the search per frame, never more
+    if (cpuStage == CP_THINK && !searchDone) cpuSearch(CPU_BUDGET_US);
     if ((int32_t)(now - lastTick) > 200) lastTick = now - TICK_MS;   // no catching up after a stall
     while (state == PLAY && (int32_t)(now - lastTick) >= (int32_t)TICK_MS) {
       lastTick += TICK_MS;
@@ -1165,16 +1676,35 @@ void update(uint32_t now) {
   } else if (state == TITLE) {
     qL.clear();
     qR.clear();
-    // Tap L: one or two players, Tap R: start (on the release of a press made here)
+    // Tap L: one or two players / next opponent, Tap R: start, next or pick
+    // (on the release of a press made here)
     if (eL == 1 || eR == 1) armed = true;
     if (armed && eL == 2) {
       armed = false;
-      twoPlayers = !twoPlayers;
-      prefs.putUChar("pool_mode", twoPlayers ? 1 : 0);
+      if (titleStage == 0) {
+        twoPlayers = !twoPlayers;
+        prefs.putUChar("pool_mode", twoPlayers ? 1 : 0);
+      } else {
+        oppSel = (oppSel + 1) % NUM_OPP;
+      }
       dirty = true;
     } else if (armed && eR == 2) {
       armed = false;
-      newGame();
+      if (titleStage == 0 && twoPlayers) {
+        titleStage = 1;
+        oppSel = cpuLevel;
+        dirty = true;
+      } else if (titleStage == 1 && oppSel == NUM_OPP - 1) {
+        titleStage = 0;
+        dirty = true;
+      } else {
+        if (titleStage == 1) {
+          cpuLevel = oppSel;
+          prefs.putUChar("pool_opp", cpuLevel);
+        }
+        titleStage = 0;                                       // "again" and the next visit start from here
+        newGame();
+      }
     }
     if (state == TITLE && idleTooLong(now, lastInput)) goToSleep();
   } else {
