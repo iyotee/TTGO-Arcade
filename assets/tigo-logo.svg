@@ -163,7 +163,7 @@
       <text x="592" y="266" font-size="52" letter-spacing="4" fill="#3A1F3D" opacity=".25" transform="translate(4 5)">ARCADE</text>
       <text x="592" y="266" font-size="52" letter-spacing="4" fill="url(#title2)" stroke="#3A1F3D" stroke-width="7" stroke-linejoin="round" paint-order="stroke">ARCADE</text>
     </g>
-    <text x="552" y="324" text-anchor="middle" font-family="'Trebuchet MS','Segoe UI',Verdana,sans-serif" font-weight="700" font-size="19" fill="#3A1F3D">56 games · 10 tools · 2 buttons · 1 crab</text>
+    <text x="552" y="324" text-anchor="middle" font-family="'Trebuchet MS','Segoe UI',Verdana,sans-serif" font-weight="700" font-size="19" fill="#3A1F3D">60 games · 12 apps · 2 buttons · 1 crab</text>
     <path transform="translate(440 150) scale(1.1)" d="M0 -10 Q1.5 -1.5 10 0 Q1.5 1.5 0 10 Q-1.5 1.5 -10 0 Q-1.5 -1.5 0 -10Z" fill="#FFFFFF"/><path transform="translate(756 190) scale(0.8)" d="M0 -10 Q1.5 -1.5 10 0 Q1.5 1.5 0 10 Q-1.5 1.5 -10 0 Q-1.5 -1.5 0 -10Z" fill="#FFFFFF"/><path transform="translate(410 300) scale(0.7)" d="M0 -10 Q1.5 -1.5 10 0 Q1.5 1.5 0 10 Q-1.5 1.5 -10 0 Q-1.5 -1.5 0 -10Z" fill="#FFF6C8"/>
   </g>
   <rect x="4" y="4" width="792" height="392" rx="30" fill="none" stroke="#3A1F3D" stroke-width="5"/>

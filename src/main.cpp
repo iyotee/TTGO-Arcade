@@ -1,6 +1,6 @@
 // Games for LilyGO TTGO T-Display V1.1 (ESP32, ST7789 135x240)
 //
-// 56 two-button games and 10 pocket apps (see README.md), WiFi, OTA and themes
+// 60 two-button games and 12 pocket apps (see README.md), WiFi, OTA and themes
 // in Settings. On boot a launcher offers Games, Apps, Settings and Sleep; Games
 // and Apps open alphabetical lists:
 //   Launcher : Tap L next · Tap R open
@@ -71,6 +71,7 @@ static const MenuItem ITEMS[] = {
   GAME("Columns", "columns_hi", columns),
   GAME("Crossy",  "crossy_hi",  crossy),
   HEAVY("Crypt",  "crypt_hi",   launcher::cryptIcon),
+  GAME("Darts",   "darts_hi",   darts),
   GAME("Dino",    "dino_hi",    dino),
   GAME("Dodge",   "dodge_hi",   dodge),
   GAME("Doodle",  "doodle_hi",  doodle),

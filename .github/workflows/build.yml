@@ -1,4 +1,4 @@
-# Builds both firmwares on every push to main and publishes them on GitHub
+# Checks the docs (tools/check_docs.py), then builds both firmwares on every push to main and publishes them on GitHub
 # Pages next to the companion page (docs/*):
 #   https://<owner>.github.io/<repo>/fw/manifest.json   what the launcher checks
 #   .../fw/firmware.bin    the launcher (env ttgo-t-display)
@@ -34,6 +34,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      # README / docs / logo counts and tables against src/main.cpp: a stale README fails the build
+      - name: Check the docs match the code
+        run: python3 tools/check_docs.py
 
       - name: Cache PlatformIO
         uses: actions/cache@v4

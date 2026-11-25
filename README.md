@@ -3,13 +3,13 @@
 </p>
 
 <p align="center">
-  <b>🦀 "Hi, I'm Tigo! Two claws, two buttons, 59 games. Pinch L, pinch R, let's play!"</b>
+  <b>🦀 "Hi, I'm Tigo! Two claws, two buttons, 60 games. Pinch L, pinch R, let's play!"</b>
 </p>
 
 # 🎮 TTGO-Arcade
 
 > Retro arcade game collection for the **LilyGO TTGO T-Display V1.1** (ESP32), hosted by **Tigo**, a cheeky hermit crab who lives in your screensaver.  
-> Featuring **56 playable two-button games** (including the original **Fringe**), **10 pocket apps**, a launcher with alphabetical Games and Apps lists, two themes (**Original** and **Neon**), over-the-air updates, a Tamagotchi-style screensaver, a PIN lock, a WiFi clock, a Bluetooth remote for your phone, persistent high scores, and a modular single-file architecture for makers.
+> Featuring **60 playable two-button games** (including the original **Fringe** and the two **Big Games**, Abyx and Crypt), **12 pocket apps**, a launcher with alphabetical Games and Apps lists, two themes (**Original** and **Neon**), automatic updates from GitHub, a Tamagotchi-style screensaver, a PIN lock, a WiFi clock, a Bluetooth remote for your phone, a companion web page, crash reports, persistent high scores, and a modular single-file architecture for makers.
 
 <p align="center">
   <a href="https://buymeacoffee.com/zcnxsnw3vw"><img src="assets/support-me-sticker.gif" alt="Support me: buy Tigo a coffee" width="200"></a><br>
@@ -20,17 +20,18 @@
 
 ## ✨ Features
 
-- **56 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**.
+- **60 Arcade, Action, Puzzle & Retro Games** — All designed specifically for a **135 × 240 portrait** IPS screen and **2 physical buttons**. The two biggest (**Abyx**, **Crypt**) come as a downloadable **Big Games cartridge**.
 - **Launcher** — The boot screen lists **Games**, **Apps**, **Settings** and **Sleep**; Games and Apps open alphabetical lists, so every game is easy to find.
-- **10 Pocket Apps** — **Breathe** (guided breathing), **Clock** (NTP over WiFi, time zones, digital / analog), **Dice** (dice, coin, D20, 1-100, yes/no), **Minute** (countdown with flashing alarm), **Morse** keyer/decoder, **Remote** (Bluetooth camera shutter, music and slides for iPhone & Android), **Tally** two-player counter, **Tigo** (feed, play with and clean the mascot), **Timer** (stopwatch with laps) and **Torch** (White, Warm, Red, SOS, Strobe).
+- **12 Pocket Apps** — **Breathe** (guided breathing), **Clock** (NTP over WiFi, time zones, digital / analog), **Comp.** (QR code to the companion page), **Dice** (dice, coin, D20, 1-100, yes/no), **Minute** (countdown with flashing alarm), **Morse** keyer/decoder, **Remote** (Bluetooth camera shutter, music and slides for iPhone & Android), **Support** (buy Tigo a coffee), **Tally** two-player counter, **Tigo** (feed, play with and clean the mascot), **Timer** (stopwatch with laps) and **Torch** (White, Warm, Red, SOS, Strobe).
 - **Two Themes** — **Original** (the default) and **Neon**: a glowing purple-black UI with neon pink / cyan / lime outlines, and a neon Tigo with a backwards snapback, sunglasses and a gold chain.
-- **OTA Updates** — Flash new firmware over WiFi from *Settings → OTA update*; your scores and settings stay put.
+- **Automatic Updates** — The launcher checks GitHub once an hour and installs a new build from *Settings → Updates*; developers can also push a build from the PC with *Settings → OTA update*. Your scores and settings stay put.
+- **WiFi on demand** — WiFi only connects while something needs it (update check, clock sync, the WiFi / OTA / Updates screens, cartridge downloads) and switches fully off ~20 s later, saving battery and memory.
 - **Tigo's Screensaver** — An animated beach where Tigo wanders, talks in speech bubbles, eats, naps and pinches your battery badge.
 - **PIN Lock** — Optional 4-8 press L/R combination (e.g. `LLRL`), off by default.
-- **Bluetooth** — A phone remote (no app needed) and a **Companion web page** to message Tigo, send treats, share your WiFi password and sync the clock.
-- **Smooth Animated Lists** — 60 fps scrolling with live animated game icons, mini battery/USB status badge, and fast scroll on `Hold L`.
+- **Bluetooth** — A phone remote (no app needed) and a **Companion web page** to message Tigo, send treats, share your WiFi password, sync the clock and install the Big Games.
+- **Smooth Animated Lists** — 60 fps scrolling with live animated game icons, mini battery/USB status badge, fast scroll down on `Hold L` and scroll up on `Hold L + R`.
 - **Persistent Saves (NVS)** — Remembers high scores, the last category and item you opened, theme, brightness, screensaver and sleep timers, PIN, Tigo, WiFi and Bluetooth state, and USB logging across power-offs.
-- **Power & Diagnostics** — 5 brightness levels, short or long idle timers (`5s` up to `10m`), deep sleep with single-button wake, battery voltage curve, and crash reporting.
+- **Power & Diagnostics** — 5 brightness levels, short or long idle timers (`5s` up to `10m`), deep sleep with single-button wake, battery voltage curve, and crash reports (faulting address and backtrace, shown as a QR code).
 - **Easy to Extend** — Add a new game with one `src/<game>.cpp` file and two one-line registrations.
 
 ---
@@ -94,29 +95,29 @@ The boot screen is a launcher with four entries:
 
 | Entry | Opens |
 |---|---|
-| **Games** | All 59 games, in alphabetical order (`2048` and `21` first); the Big Games (Abyx, Crypt) show greyed with **Download** until their cartridge is installed |
+| **Games** | All 60 games, in alphabetical order (`2048` and `21` first); the Big Games (Abyx, Crypt) show greyed with **Download** until their cartridge is installed |
 | **Apps** | The 12 pocket apps, in alphabetical order |
 | **Settings** | Brightness, theme, timers, PIN, WiFi, Updates, OTA, Bluetooth, Crash report... |
 | **Sleep** | Deep sleep right away (press **R** to wake) |
 
 The launcher remembers the last category and item you opened.
 
-**In every list** (launcher, Games, Apps, Settings, Reset scores, WiFi networks): `Tap L` next · `Hold L` scroll down fast · **`Hold L + R` scroll up** (repeats while held) · `Tap R` open · `Hold R` back to the launcher (Games / Apps lists).
+**In every list** (launcher, Games, Apps, Settings, Reset scores, WiFi, WiFi networks, Updates): `Tap L` next · `Hold L` scroll down fast · **`Hold L + R` scroll up** (repeats while held) · `Tap R` open · `Hold R` back to the launcher (Games / Apps lists).
 
 **Crash report** (Settings): if the board ever crashes it keeps the faulting address and backtrace; the report shows as a QR code to scan and send, and each CI build keeps its `firmware.elf` (artifact `elf-<build>`) to decode it.
 
 ### Universal Navigation
 - **Launcher**: `Tap L` next entry · `Tap R` open
-- **Games / Apps lists**: `Tap L` next · `Hold L` fast scroll · `Tap R` open · `Hold R` back to the launcher. The first row of each list is **< Back**.
+- **Games / Apps lists**: `Tap L` next · `Hold L` fast scroll · `Hold L + R` scroll up · `Tap R` open · `Hold R` back to the launcher. The first row of each list is **Back**.
 - **Title Screen**: press any button to start
-- **Game Over**: `L` back to the Games list · `R` play again
+- **Game Over**: `L` menu (back to the Games list) · `R` play again
 - **Apps**: `Hold L` goes back to the Apps list (Torch: `Tap R`)
 - When a game or app ends you return to the list it came from, with it still selected.
 - **Screensaver**: any button wakes it
 
 ---
 
-## 🎯 Games (59)
+## 🎯 Games (60)
 
 > 🦀 *"Is that a high score? Beat it and I unlock a new shell!"*
 
@@ -126,7 +127,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 |---|---|---|---|
 | **2048** | Puzzle | `Tap L / R` up/right · `Hold L / R` left/down | Merge matching tiles to reach 2048 and beyond |
 | **21** | Puzzle | `Tap L` hit · `Tap R` stand / next hand | Arcade Blackjack; reach the highest chip stack |
-| **Abyx** 🎮 | Big Game | `Hold L / R` walk · `L + R` jump (hold = higher) · auto-fire · `Hold L + R` 1 s still = map | Metroidvania starring Tigo shooting shrimps: 28 rooms, 5 biomes, 5 guardians, powers (bubble jump, Jumbo claw, wall cling, jet dash, heat shell), hidden shells, save clams; portrait or landscape |
+| **Abyx** 🎮 | Big Game | `Hold L / R` walk · `L + R` jump (hold = higher) · auto-fire · `Hold L + R` 1 s still = map (keep holding: save & quit) | Metroidvania starring Tigo shooting shrimps: 28 rooms, 5 biomes, 5 guardians, powers (bubble jump, Jumbo claw, wall cling, jet dash, heat shell), hidden shells, save clams; portrait or landscape; it saves and sleeps when left idle |
 | **Bowl** | Skill | `Tap L / R` set spot, then aim · `Hold L / R` hook | 10-pin bowling, real scoring with strikes & spares (300 max) |
 | **Bricks** | Arcade | `Hold L / R` move paddle | Breakout: clear the wall, 3 lives, faster each level |
 | **Bumper** | Arcade | `Hold L / R` steer · `L + R` turbo ram | Knock AI bots out of the circular sumo arena |
@@ -138,6 +139,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 | **Columns** | Puzzle | `Tap L / R` move · `Hold L` cycle gems · `Hold R` fast drop | Match 3+ gems horizontally, vertically, or diagonally |
 | **Crossy** | Runner | `Tap L / R` forward · `Hold L / R` sideways · `L + R` back | Cross roads and rivers; keep moving before the eagle comes |
 | **Crypt** 🎮 | Big Game | `Hold L / R` turn · `Hold L + R` swim forward · `Tap L / R` cast · `Tap L + R` map | Original first-person raycasting crawl through a sunken crypt: 10 depths, keys and doors, foes and a boss; portrait or landscape |
+| **Darts** | Skill | `Tap L / R` stop the aim (left-right sweep, then up-down) to throw | Pub darts: 8 rounds of 3 darts on a real board (doubles, triples, bull 50); a slight hand wobble keeps it honest; 180 = celebration |
 | **Dino** | Runner | `Tap R` jump · `Hold L` duck / fast-fall | Leap cacti and duck under birds |
 | **Dodge** | Arcade | `Hold L / R` move | Survive changing bullet patterns; skim bullets for graze points; one hit |
 | **Doodle** | Runner | `Hold L / R` steer left/right | Bounce upward on platforms; cyan moves, yellow boosts |
@@ -164,12 +166,12 @@ Sorted alphabetically, as in the **Games** list on the device.
 | **Pinball** | Arcade | `Hold L / R` flippers · `Hold & release R` launch | Hit bumpers, drop targets & top lanes (up to 5x); 3 balls |
 | **Plinko** | Skill | `Tap L / R` drop ball · `Hold L / R` nudge balls | 12 balls through a peg board; the 100 slot gives a free ball |
 | **Pong 2P** | Arcade | `Tap L` P1 flip dir · `Tap R` P2 flip dir | Local 2-player Pong on one board (first to 5; best = max rally) |
-| **Pool** | Skill | `Hold L / R` aim · `Tap L / R` fine aim · `Hold L + R` power, release to shoot · title: `Tap L` 1/2 players | 1 player: clear the table in as few shots as you can; 2 players: 8-ball vs a friend (taking turns) or vs the CPU (Easy / Normal / Hard) |
+| **Pool** | Skill | `Hold L / R` aim · `Tap L / R` fine aim · `Hold L + R` power, release to shoot · ball in hand: `L / R` slide, `L + R` place · keep `L + R` held ~5 s = *Quit game?* · title: `Tap L` 1/2 players | 1 player: clear the table in as few shots as you can; 2 players: 8-ball vs a friend (taking turns) or vs the CPU (Easy / Normal / Hard) |
 | **Pop** | Puzzle | `Tap L` next tile · `Hold L` next row · `Tap R` pop group | Pop groups of 2+ same tiles; bigger groups score much more |
 | **Race** | Runner | `Hold L / R` steer | Dodge traffic on a winding road; grass slows you down |
 | **Reversi** | Puzzle | `Tap L` next move · `Hold L` previous · `Tap R` place | Othello-style vs the CPU; score = your discs (+30 for a win) |
 | **Rhythm** | Skill | `Tap L / R` hit left/right beat | Hit falling notes on the target ring (up to 4x combo) |
-| **River** | Arcade | `Hold L / R` steer · `L + R` boost (auto-fire) | Shoot choppers & ships; fly over `F` tanks to refuel |
+| **River** | Arcade | `Hold L / R` steer · `L + R` boost (auto-fire) | Shoot choppers & ships; fly over the pink `F` fuel tanks to refuel (don't shoot them) |
 | **Shooter** | Arcade | `Hold L / R` fly (auto-fire) | Destroy saucers and cruisers in growing waves; 3 lives |
 | **Simon** | Puzzle | `Tap L / R` cyan / magenta pad | Watch and repeat the growing color sequence |
 | **Ski** | Runner | `Hold L / R` carve left/right | Dodge trees and rocks; pass flag gates for +50 |
@@ -179,7 +181,7 @@ Sorted alphabetically, as in the **Games** list on the device.
 | **Sub** | Arcade | `Hold L` dive · `Hold R` rise · `L + R` torpedo | Grab sea-floor chests, sink sharks & mines, surface for oxygen; 3 hulls |
 | **Swing** | Runner | `Hold L / R` grapple (rope reels in) · release to fly | Swing from anchor to anchor; don't fall or get left behind |
 | **Tank** | Arcade | `Hold L / R` aim barrel · `Hold L + R` charge, release to fire | Artillery duel vs a CPU tank over hills and wind; 3 HP each |
-| **Tennis** | Arcade | `Hold L / R` move | Beat the CPU; paddle edges give sharp angles (first to 5) |
+| **Tennis** | Arcade | `Hold L / R` move | Score as many points as you can before the CPU reaches 5; racket edges give sharp angles and every point makes the CPU sharper |
 | **Tetris** | Puzzle | `Tap L / R` move · `Hold L` rotate · `Hold R` soft drop · `L + R` hard drop | Clear lines; speeds up every 10 lines |
 | **Tron** | Arcade | `Tap L / R` turn 90° left/right | Light cycles: trap the AI in your trail; each round is faster |
 | **Whack** | Skill | `Tap L / R` whack left/right burrow | Hit moles (+10 / +30), skip red bombs; 3 lives |
@@ -197,8 +199,8 @@ Sorted alphabetically, as in the **Apps** list on the device.
 | App | Controls | Description |
 |---|---|---|
 | **Breathe** | `Tap L` pattern · `Tap R` start / pause · `Hold L` back | Guided breathing (Box 4-4-4-4, Relax 4-7-8, Calm 5-5) with an animated circle |
-| **Comp.** | `Tap R` QR code / address · `Hold L` back | Companion: QR code to the companion web page and the Bluetooth link; shows the progress when the phone installs the Big Games |
-| **Clock** | `Tap L` next time zone · `Tap R` digital / analog · `Hold L` back | Time from NTP over WiFi (or from your phone via Bluetooth); default zone Europe/Zurich |
+| **Clock** | `Tap L` next time zone · `Tap R` digital / analog · `Hold L` back | Time from NTP over WiFi (connects by itself when WiFi is allowed) or from your phone via Bluetooth; default zone Europe/Zurich |
+| **Comp.** | `Tap R` QR code / address · `Hold L` back | Companion: QR code to the companion web page and the Bluetooth link state (Bluetooth stays on while it is open); shows the progress when the phone installs the Big Games |
 | **Dice** | `Tap L` mode · `Tap R` roll · `Hold L` back | 1–5 dice with total, coin flip, D20, 1–100 or yes/no (mode is remembered) |
 | **Minute** | `Tap L` preset / +1 min / reset · `Tap R` start / pause · `Hold L` back | Countdown (1–60 min presets); the screen flashes at full brightness when time is up |
 | **Morse** | `Tap L` dot · `Tap R` dash · `Hold R` delete · `Hold L` back | Morse keyer: decodes what you tap, with a live cheat sheet of matching letters |
@@ -213,7 +215,7 @@ Sorted alphabetically, as in the **Apps** list on the device.
 Tigo's own little Tamagotchi corner. `Tap L` **feeds** him, `Tap R` **plays** with him, `Hold R` **cleans** up after him, `Hold L` goes back to the Apps list. Three bars show his **hunger**, **fun** and **clean** levels; a happy Tigo is a chatty Tigo in the screensaver. Your **high scores unlock new shells** for his collection.
 
 ### 🕰️ Clock app
-A desk clock with **digital** and **analog** faces (`Tap R` switches). The time comes from **NTP over WiFi** (switch WiFi on in Settings), or from **your phone** through the Companion page over Bluetooth. `Tap L` steps through **time zones** (default **Europe/Zurich**, `CET-1CEST,M3.5.0,M10.5.0/3`, with automatic daylight saving). `Hold L` returns to the Apps list.
+A desk clock with **digital** and **analog** faces (`Tap R` switches). The time comes from **NTP over WiFi** (with WiFi allowed in Settings the board connects by itself to sync, at boot when the time is unknown and then every 6 h, and switches WiFi off again), or from **your phone** through the Companion page over Bluetooth. `Tap L` steps through **time zones** (default **Europe/Zurich**, `CET-1CEST,M3.5.0,M10.5.0/3`, with automatic daylight saving). `Hold L` returns to the Apps list.
 
 ---
 
@@ -237,15 +239,16 @@ Pair **`TTGO-Arcade`** from your phone's Bluetooth settings (works on **iPhone a
 ### Companion web page
 **👉 [iyotee.github.io/TTGO-Arcade/companion.html](https://iyotee.github.io/TTGO-Arcade/companion.html)**
 
-Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it does **not** work on iPhone), press *Connect* and pick `TTGO-Arcade`. From the page you can:
+Open it in **Chrome or Edge on Android or on a desktop** (it uses Web Bluetooth, so it does **not** work on iPhone), press *Connect* and pick `TTGO-Arcade`. From the page you can:
 
 - 💬 **send Tigo a message**, shown in his speech bubble on the screensaver;
-- 🍤 **send treats** (he eats them on screen);
+- 🍤 **send treats** (he eats them in the screensaver);
 - 📶 **send a WiFi name and password**, so you never type on the board;
 - 🕰️ **sync the clock** from your phone (no WiFi needed);
-- 🔋 **see the battery and WiFi status** of the board.
+- 🔋 **see the battery and WiFi status** of the board;
+- 🎮 **install the Big Games cartridge** over Bluetooth (keep the board's **Comp.** app open).
 
-> **Note for forks:** the page lives in `docs/companion.html` and is served by **GitHub Pages**. Enable it under *Settings → Pages → Deploy from a branch → `main` / `/docs`*.
+> **Note for forks:** the page lives in `docs/companion.html` and is published on **GitHub Pages** by the CI ([build.yml](.github/workflows/build.yml)) together with the firmware. Enable it once under *Settings → Pages → Source = GitHub Actions*.
 
 ---
 
@@ -255,7 +258,7 @@ Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it d
 
 > 🦀 *"Settings? I only need one: more snacks."*
 
-- **Launcher**: Shows a live battery/USB badge top-left (plus a WiFi badge when connected) and remembers the last category and item.
+- **Launcher**: Shows a live battery/USB badge top-left (plus a WiFi badge only while WiFi is actually connected, and an arrow badge when an update is available) and remembers the last category and item.
 - **Settings** (scrolling list):
 
 | Row | Values | What it does |
@@ -266,20 +269,24 @@ Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it d
 | **Sleep** | `5s`, `8s`, `10s`, `15s`, `20s`, `30s`, `1m`, `2m`, `5m`, `10m`, `Never` (default `1m`) | Time spent in the screensaver before deep sleep, or idle time before deep sleep when the screensaver is `Off` |
 | **PIN lock** | `Off` / `On` (default `Off`) | Ask for the PIN at boot, on wake from deep sleep and when leaving the screensaver |
 | **Change PIN** | | Set a new 4-8 press combination |
-| **WiFi >** | submenu | See below |
-| **Bluetooth** | `On` / `Off` | Remote app and Companion page |
-| **OTA update >** | screen | Receive a firmware update over WiFi (see *OTA updates*) |
+| **WiFi >** | `On` / `Off` (`...` while connecting), submenu | `On` = WiFi **allowed** (it connects on demand); see below |
+| **Updates >** | screen (`New` when a newer launcher is out) | **Check now**, **Install**, **Auto-check** `On` / `Off` (the hourly check), **Back** (see *Big Games cartridge & automatic updates*) |
+| **OTA update >** | screen | Receive a firmware upload from the PC over WiFi (see *OTA updates*) |
+| **Bluetooth** | `On` / `Off` (`Linked` while a phone is connected) | Remote app and Companion page |
 | **USB log** | `On` / `Off` | Diagnostic serial logging (`115200` baud) |
 | **Reset scores >** | submenu | Clear **All games** or any individual game's best score (with confirmation) |
-| **Back** | | Return to the launcher |
+| **Crash report >** | `none` / `!` | The last crash as a QR code (`Tap R` QR / text, `Tap L` forget, `Hold L` back) |
+| **Back to menu** | | Return to the launcher |
 
-- **WiFi >**: On/Off (saved; reconnects to the saved network at boot), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`), or sent from the Companion page. A WiFi badge shows in the launcher while connected. WiFi drains the battery faster: switch it off when you don't need it.
-- **Crash indicator**: Displays an orange warning at the bottom if a previous reset/watchdog crash occurred (e.g. `! crash in Flappy`).
+- **WiFi >**: **WiFi** `On` / `Off` (saved: whether WiFi is *allowed*), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`), or sent from the Companion page. **WiFi runs on demand**: it only connects for the hourly update check, the clock sync, the WiFi / OTA / Updates screens, cartridge downloads and credentials sent from the phone, then switches fully off about 20 s after the last user (this frees ~50 KB of memory for Bluetooth and HTTPS, and saves the battery). The WiFi badge shows in the launcher only while it is connected. `Off` means WiFi never starts.
+- **Crash indicator**: an orange line at the bottom of Settings names the last crash (e.g. `! crash: Flappy b42`); open **Crash report** for the details.
+- **Crash report**: the board keeps the faulting address (PC), the exception cause and a short backtrace across the reset. The report shows as a QR code to scan and send (or as text); each CI build keeps its `firmware.elf` (artifact `elf-<build>`, 90 days) to decode it.
 
 ### 😴 Screensaver & sleep timers
 1. After the **Screensaver** idle time, Tigo's beach screensaver starts.
 2. After the **Sleep** time spent in the screensaver, the board goes into **deep sleep** (backlight and battery ADC off). With the screensaver `Off`, **Sleep** is simply the idle time before deep sleep. `Never` keeps the board awake.
-3. Any button leaves the screensaver; press **R** (`GPIO35`) to wake from deep sleep. If the PIN lock is on, it asks for the PIN first, then you are back in the launcher.
+3. Games only do this from their title and game-over screens, except **Pool**, **Crypt** and **Abyx**, which also hand over to the screensaver (and then deep sleep) when left idle in play (Abyx saves first; Pool never while balls roll or during the CPU's turn).
+4. Any button leaves the screensaver; press **R** (`GPIO35`) to wake from deep sleep. If the PIN lock is on, it asks for the PIN first, then you are back in the launcher.
 
 ### 🔒 PIN lock
 > 🦀 *"LLRL? I won't tell anyone. Probably."*
@@ -299,18 +306,18 @@ Open it in **Chrome on Android or on a desktop** (it uses Web Bluetooth, so it d
 
 The launcher holds the light games, the apps and the settings. The heavy games (**Abyx**, **Crypt**) live in a separate **Big Games cartridge** stored in the board's second app slot. Until it is installed they show greyed with **Download** in the Games list. Select one to see the download size, free space and battery, then get it:
 
-- **over WiFi**: HTTPS from GitHub Pages, SHA-256 checked;
+- **over WiFi**: HTTPS from GitHub Pages, SHA-256 checked (the screen connects WiFi by itself, as long as WiFi is allowed and a network is saved);
 - **from your phone**: scan the QR code (Apps → Comp.) to open the [companion page](https://iyotee.github.io/TTGO-Arcade/companion.html), tap **Connect**, then **Install** (Chrome on Android / desktop).
 
 Once installed the game shows **Ready**. Starting it reboots into the cartridge (about 2 s); leaving the game reboots back into the launcher. Scores and settings are shared. A reset, crash or sleep inside the cartridge always lands back in the launcher.
 
-**Updates**: while WiFi is connected the launcher checks [fw/manifest.json](https://iyotee.github.io/TTGO-Arcade/fw/manifest.json) every hour (never during a game; switch it off in Settings → Updates). A newer launcher shows a badge and **Update available**; installing asks for confirmation and needs more than 30 % battery or USB power. A launcher update (or a PC upload through OTA update) uses the cartridge's slot, so the Big Games have to be downloaded again afterwards. Local builds are build 0 and never ask to update. Every push to `main` is built by GitHub Actions ([build.yml](.github/workflows/build.yml)) and published to GitHub Pages together with the companion page.
+**Updates**: while WiFi is allowed, the launcher connects once an hour to check [fw/manifest.json](https://iyotee.github.io/TTGO-Arcade/fw/manifest.json), then lets WiFi switch off again (never during a game; turn **Auto-check** off in *Settings → Updates*, where **Check now** checks at once). A newer launcher shows an arrow badge, **Update available** and `New` on the Updates row; **Install** asks for confirmation and needs more than 30 % battery or USB power. A launcher update (or a PC upload through OTA update) uses the cartridge's slot, so the Big Games have to be downloaded again afterwards. Local builds are build 0 and never ask to update. Every push to `main` is built by GitHub Actions ([build.yml](.github/workflows/build.yml)) and published to GitHub Pages together with the companion page.
 
 ## 📡 OTA updates
 
 > 🦀 *"New firmware, no cable? I'll catch it with my claws."*
 
-1. On the board, connect to WiFi (*Settings → WiFi*), then open **Settings → OTA update**. The screen shows the hostname `ttgo-arcade.local` and the board's IP address. Uploads are **only accepted while this screen is open**; leave it and OTA is off again.
+1. On the board, allow WiFi and save a network (*Settings → WiFi*), then open **Settings → OTA update**: it connects by itself (and pauses Bluetooth while it is open). The screen shows the hostname `ttgo-arcade.local` and the board's IP address. Uploads are **only accepted while this screen is open**; leave it and OTA is off again.
 2. On your computer, on the same network:
 
    ```sh
@@ -320,7 +327,7 @@ Once installed the game shows **Ready**. Starting it reboots into the cartridge 
 
 3. The board shows the progress, then reboots into the new firmware.
 
-Your **high scores and settings are kept**: the NVS partition stays at the same place (`0x9000`). The first build that switches to the OTA flash layout has to be flashed **over USB once** (`pio run -t upload`); after that, OTA works.
+Your **high scores and settings are kept**: the NVS partition stays at the same place (`0x9000`). An upload goes into the other app slot, so the Big Games cartridge has to be downloaded again afterwards. The first build that switches to the OTA flash layout has to be flashed **over USB once** (`pio run -t upload`); after that, OTA works.
 
 ---
 
@@ -328,10 +335,11 @@ Your **high scores and settings are kept**: the NVS partition stays at the same 
 
 > 🦀 *"Flash me gently: over USB, or over the air."*
 
-Requires [PlatformIO](https://platformio.org/) (VS Code extension or `pio` CLI). Dependencies (`espressif32@6.9.0`, `TFT_eSPI@^2.5.43`, `NimBLE-Arduino`) are fetched automatically on first build.
+Requires [PlatformIO](https://platformio.org/) (VS Code extension or `pio` CLI). Dependencies (`espressif32@6.9.0`, `TFT_eSPI@^2.5.43`, `NimBLE-Arduino@~1.4.3`, `QRCode@^0.0.1`) are fetched automatically on first build.
 
 ```sh
-pio run                    # Compile firmware
+pio run                    # Compile the launcher firmware
+pio run -e cartridge       # Compile the Big Games cartridge (installed from the launcher, never over USB)
 pio run -t upload          # Compile and flash over USB
 pio run -e ota -t upload   # Compile and flash over WiFi (open Settings > OTA update first)
 pio device monitor         # Serial monitor (115200 baud, exception decoder)
@@ -347,8 +355,12 @@ pio device monitor         # Serial monitor (115200 baud, exception decoder)
 ## 🧩 Project Structure
 
 ```text
-├── platformio.ini        # Board, libraries, TFT_eSPI build flags, partitions, USB and OTA upload envs
+├── platformio.ini        # Board, libraries, TFT_eSPI build flags, partitions (min_spiffs.csv); envs: ttgo-t-display (USB), cartridge, ota
 ├── README.md             # Project documentation
+├── .github/workflows/
+│   └── build.yml         # CI: checks the docs, builds both firmwares, publishes them + docs/ on GitHub Pages
+├── tools/
+│   └── check_docs.py     # Checks that README / docs / logo counts and tables match the code (run by the CI)
 ├── assets/               # Artwork (not flashed to the board)
 │   ├── tigo-logo.svg/.png        # The header logo (Tigo on the beach)
 │   ├── tigo.svg                  # Original Tigo
@@ -358,31 +370,41 @@ pio device monitor         # Serial monitor (115200 baud, exception decoder)
 │   ├── tigo-neon-mascot.png      # Neon Tigo painting, transparent cut-out (crab only)
 │   ├── tigo-neon-source.jpg      # The original neon Tigo painting
 │   └── support-me-sticker.gif    # Support sticker
-├── docs/
-│   └── companion.html    # Web Bluetooth companion page (GitHub Pages)
+├── docs/                 # GitHub Pages
+│   ├── index.html        # Home page (latest build from fw/manifest.json)
+│   └── companion.html    # Web Bluetooth companion page (messages, treats, WiFi, clock, Big Games install)
 └── src/
     ├── common.h          # Pin definitions, shared helpers, theme API, game declarations
-    ├── main.cpp          # Launcher, Games / Apps lists, shared HUD/Game Over UI, setup/loop
-    ├── theme.cpp         # Original / Neon themes, themed boxes
-    ├── otaui.cpp         # OTA update screen
-    ├── power.cpp         # PWM backlight, battery ADC curve, deep sleep, idle timers
-    ├── diag.cpp          # USB logging & persistent crash diagnostics
-    ├── settings.cpp      # Settings UI, Reset Scores submenu & confirmation modal
-    ├── tigo.cpp          # drawTigo(): the mascot, in all his poses (and outfits)
-    ├── saver.cpp         # Tigo's beach screensaver
-    ├── lockscr.cpp       # PIN lock: set, unlock, lockout
-    ├── clock.cpp         # Time service: NTP sync, time zones
-    ├── ble.cpp           # Bluetooth: HID remote + companion page service
-    ├── wifi.cpp          # WiFi: reconnect, scan, connect, WPS (push button)
+    ├── main.cpp          # Launcher, Games / Apps lists (ITEMS[] table), badges, setup/loop
+    ├── ui_common.cpp/.h  # Shared by both firmwares: globals, buttons, score / game-over screens, start-up
+    ├── theme.cpp, themeui.h      # Original / Neon themes, themed boxes
+    ├── power.cpp/.h      # PWM backlight, battery ADC curve, screensaver / sleep delays, deep sleep
+    ├── diag.cpp          # USB logging & the last-crash line
+    ├── crashrec.cpp/.h   # Crash forensics: PC, cause and backtrace kept across the reset
+    ├── crashui.cpp       # Settings > Crash report (QR code / text)
+    ├── settings.cpp      # Settings list, Reset scores submenu & confirmation
+    ├── tigo.cpp/.h       # drawTigo(): the mascot in all his poses (and outfits), his needs and shells
+    ├── saver.cpp         # Tigo's beach screensaver (messages and treats from the phone)
+    ├── lockscr.cpp/.h    # PIN lock: set, unlock, lockout
+    ├── clock.cpp/.h      # Time service: NTP sync (WiFi on demand), time zones
+    ├── ble.cpp/.h        # Bluetooth: HID remote + companion page service (incl. cartridge install)
+    ├── wifi.cpp          # WiFi on demand (wifiAcquire / wifiRelease): reconnect, scan, connect, WPS
     ├── wifiui.cpp        # WiFi screens: status, network list, password wheel, WPS
-    ├── tigoapp.cpp, clockapp.cpp, remote.cpp                      # Tigo, Clock and Remote apps
-    ├── timer.cpp         # Stopwatch app
-    ├── torch.cpp         # Flashlight app
-    ├── dice.cpp, tally.cpp, minute.cpp, morse.cpp, breathe.cpp   # Other apps
+    ├── otaui.cpp         # Settings > OTA update (upload from the PC)
+    ├── updates.cpp/.h    # Hourly manifest check, downloads, Settings > Updates
+    ├── netcerts.h        # Root certificates for the HTTPS downloads
+    ├── cart.cpp/.h       # Big Games cartridge: install into the other app slot, hand-over
+    ├── cartui.cpp        # Cartridge screen (download / start Abyx and Crypt)
+    ├── cartmain.cpp      # The cartridge firmware's entry point (env cartridge)
+    ├── orient.h          # Portrait / landscape helper for the Big Games
+    ├── abyx.cpp, abyx_*.h        # Abyx (cartridge)
+    ├── crypt.cpp, crypt_*.h      # Crypt (cartridge)
+    ├── breathe.cpp, clockapp.cpp, companionapp.cpp, dice.cpp, minute.cpp, morse.cpp,
+    │   remote.cpp, support.cpp, tally.cpp, tigoapp.cpp, timer.cpp, torch.cpp   # The 12 apps
     └── <game>.cpp        # One self-contained namespace per game
 ```
 
-**Adding a game:** create `src/<name>.cpp` with a `namespace <name>` exposing `begin()`, `update(now)` and `drawIcon(cx, cy, dim, t)` (copy the structure of `gravity.cpp` or `stack.cpp`), then add `DECLARE_GAME(<name>)` to `common.h` and a `GAME("Name", "<name>_hi", <name>)` line to `ITEMS[]` in `main.cpp`. The Games list sorts itself alphabetically, so the position in `ITEMS[]` does not matter. The high score is kept in NVS under `<name>_hi` (15 characters max).
+**Adding a game:** create `src/<name>.cpp` with a `namespace <name>` exposing `begin()`, `update(now)` and `drawIcon(cx, cy, dim, t)` (copy the structure of `gravity.cpp` or `stack.cpp`), then add `DECLARE_GAME(<name>)` to `common.h` and a `GAME("Name", "<name>_hi", <name>)` line to `ITEMS[]` in `main.cpp`. The Games list sorts itself alphabetically, so the position in `ITEMS[]` does not matter. The high score is kept in NVS under `<name>_hi` (15 characters max). Then add its row to the **Games** table of this README (and bump the counts): the CI runs `python3 tools/check_docs.py` and fails when the docs don't match the code.
 
 ---
 
@@ -393,10 +415,10 @@ pio device monitor         # Serial monitor (115200 baud, exception decoder)
 - **Upload fails** (`No serial data received` / `serial noise`): Run `pio run -t upload` again (the CH9102 USB-serial chip occasionally needs a retry), or hold **L (BOOT)** while upload starts. Keep `upload_speed = 460800`.
 - **Screen is black**: The board is in deep sleep — press **R** (`GPIO35`) to wake it.
 - **Forgot your PIN**: Reflash the firmware after erasing the flash (`pio run -t erase`, then `pio run -t upload`); this also clears high scores and settings.
-- **Clock shows no time**: Switch WiFi on and connect to a network, or sync the clock from the Companion page.
+- **Clock shows no time**: Allow WiFi (*Settings → WiFi*, `On`) and save a network (the board connects by itself to sync), or sync the clock from the Companion page.
 - **Phone can't find `TTGO-Arcade`**: Check that **Bluetooth** is `On` in Settings; on iPhone pair it from *Settings → Bluetooth*. If it was paired before a reflash, *forget* it on the phone and pair again.
-- **Companion page won't connect**: Use Chrome on Android or desktop (Web Bluetooth is not available on iPhone).
-- **OTA upload is refused or times out**: Open *Settings → OTA update* on the board first (uploads are only accepted while that screen is shown), check that WiFi is connected, and use the IP shown on screen if `ttgo-arcade.local` does not resolve (`pio run -e ota -t upload --upload-port <ip>`). The very first switch to the OTA flash layout must be flashed over USB.
+- **Companion page won't connect**: Use Chrome or Edge on Android or desktop (Web Bluetooth is not available on iPhone).
+- **OTA upload is refused or times out**: Open *Settings → OTA update* on the board first (uploads are only accepted while that screen is shown), check that WiFi is allowed and a network is saved (the screen connects by itself), and use the IP shown on screen if `ttgo-arcade.local` does not resolve (`pio run -e ota -t upload --upload-port <ip>`). The very first switch to the OTA flash layout must be flashed over USB.
 - **Debugging**: Enable `Settings → USB log` and run `pio device monitor`.
 
 ---

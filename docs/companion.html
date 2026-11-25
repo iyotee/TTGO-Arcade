@@ -242,7 +242,7 @@
       <span class="state" id="connState" style="flex:1">Not connected</span>
       <button id="connectBtn" class="teal">Connect</button>
     </div>
-    <p class="note">On the board, open the <b>Companion</b> app (or switch Bluetooth on in <b>Settings</b>),
+    <p class="note">On the board, open the <b>Comp.</b> (Companion) app in Apps (or switch Bluetooth on in <b>Settings</b>),
       then pick <b>TTGO-Arcade</b> in the list.</p>
   </section>
 
@@ -277,7 +277,7 @@
       <button type="button">Time for a nap</button>
       <button type="button">You're the best crab</button>
     </div>
-    <p class="note">It pops up in Tigo's speech bubble on the screensaver and in the Tigo app. Accents are simplified (é → e).</p>
+    <p class="note">It pops up in Tigo's speech bubble on the screensaver. Accents are simplified (é → e).</p>
   </section>
 
   <section class="card">
@@ -286,7 +286,7 @@
       <button id="treatBtn" class="needs wide" disabled>Throw a treat</button>
       <button id="treat5Btn" class="needs sand" disabled>x5</button>
     </div>
-    <p class="note">Tigo eats them next time you open his app. He never says no to a snack.</p>
+    <p class="note">Tigo eats them on the screensaver. He never says no to a snack.</p>
   </section>
 
   <section class="card">
@@ -303,7 +303,8 @@
     </form>
     <p class="note">No typing on the board. The first time, your phone asks to <b>pair</b> with TTGO-Arcade:
       the password only travels over the encrypted link and is not stored by this page.
-      Open networks: leave the password empty.</p>
+      Open networks: leave the password empty. The board joins the network once to check it, then
+      WiFi only switches on when it needs it (update check, clock sync, downloads).</p>
   </section>
 
   <section class="card">
@@ -324,7 +325,7 @@
       <button id="instCancel" class="ghost wide" style="margin-top:10px">Cancel</button>
     </div>
     <p class="note">The big games live in a separate "cartridge" next to the board's own firmware.
-      Keep the board's <b>Companion</b> app open, on USB or with some battery left, and this page in front
+      Keep the board's <b>Comp.</b> (Companion) app open, on USB or with some battery left, and this page in front
       (the screen stays on). Your phone may ask to <b>pair</b>: accept. If the link drops, tap Install again:
       it carries on where it stopped. Installing a launcher update later erases the cartridge; the board
       offers to download it again.</p>
@@ -415,7 +416,7 @@
     }
     if (!s.on) { $('wifiV').textContent = 'Off'; $('wifiS').textContent = s.ssid ? 'saved: ' + s.ssid : ''; }
     else if (s.wifi) { $('wifiV').textContent = s.ssid || 'Connected'; $('wifiS').textContent = s.ip || ''; }
-    else { $('wifiV').textContent = 'Not connected'; $('wifiS').textContent = s.ssid ? 'trying ' + s.ssid : 'no network saved'; }
+    else { $('wifiV').textContent = 'On demand'; $('wifiS').textContent = s.ssid ? s.ssid + ', connects when needed' : 'no network saved'; }
     if (s.ssid && !$('ssid').value) $('ssid').value = s.ssid;
   }
   function parseStatus(dv) {
