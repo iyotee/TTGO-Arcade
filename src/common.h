@@ -179,7 +179,8 @@ int bleTakeTreats();                  // treats sent from the phone since the la
 
 // ---------------- diagnostics (diag.cpp) ----------------
 void initDiag(const char *(*itemName)(int));   // after prefs.begin(); item -1 = menu
-void dbg(const char *fmt, ...);       // printf to USB serial when USB logging is on
+void dbg(const char *fmt, ...);       // printf to USB serial when USB logging is on (always kept in a RAM ring)
+size_t dbgRingCopy(char *out, size_t n);   // the last ~2 KB of log lines, oldest first
 bool usbLogOn();
 void setUsbLog(bool on);
 void noteActiveItem(int item);        // remembered across a crash reset

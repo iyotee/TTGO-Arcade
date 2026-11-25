@@ -238,8 +238,15 @@ static bool httpsGet(const char *url, uint32_t expect) {
   } else {
     int code = http->GET();
     if (code != 200) {
-      if (code < 0) setErr("can't reach server (%d)", code);
-      else setErr("server said %d", code);
+      if (code < 0) {
+        // the whole story goes to the log: HTTP client error, TLS error, memory
+        char tls[96] = "";
+        int te = cli->lastError(tls, sizeof tls);
+        dbg("upd: GET %s failed %d (%s) tls %d (%s) heap %u block %u\n", url, code,
+            HTTPClient::errorToString(code).c_str(), te, tls, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+        if (te) setErr("TLS error %d", te);
+        else setErr("can't reach server (%d)", code);
+      } else setErr("server said %d", code);
     } else {
       int len = http->getSize();
       if (expect && len >= 0 && (uint32_t)len != expect) setErr("size differs from manifest");

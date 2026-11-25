@@ -18,6 +18,8 @@
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 #include <Update.h>
+#include <WebServer.h>
+#include "crashrec.h"
 #include "ble.h"
 #include "esp_bt.h"
 
@@ -128,6 +130,60 @@ static void configure() {
   });
 }
 
+// ---------------- diagnostics pages (only while this screen listens) ----------------
+// http://ttgo-arcade.local/info, /log and /crash: what the board would print on
+// USB, readable over WiFi when it is not plugged in.
+static WebServer *web = nullptr;
+
+static void sendText(const String &s) { web->send(200, "text/plain; charset=utf-8", s); }
+
+static void pageInfo() {
+  char b[420];
+  struct tm tm;
+  bool t = localTimeNow(&tm);
+  snprintf(b, sizeof b,
+           "TTGO-Arcade build %u\nuptime %lu s\nheap %u free, %u min, %u largest block\n"
+           "wifi %s rssi %d ip %s\nbluetooth %s\ntime %s %02d:%02d:%02d\ntheme %s\ncartridge state %d\n",
+           (unsigned)FW_BUILD, (unsigned long)(millis() / 1000), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
+           ESP.getMaxAllocHeap(), wifiStatusText(), wifiRssi(), ipText, bleControllerOn() ? "on" : "off",
+           t ? "ok" : "unknown", t ? tm.tm_hour : 0, t ? tm.tm_min : 0, t ? tm.tm_sec : 0,
+           themeName(themeIndex()), cartState());
+  sendText(b);
+}
+
+static void pageLog() {
+  char *b = (char *)malloc(2100);
+  if (!b) { web->send(503, "text/plain", "low memory"); return; }
+  dbgRingCopy(b, 2100);
+  sendText(b);
+  free(b);
+}
+
+static void pageCrash() {
+  char b[260];
+  crashText(b, sizeof b);
+  char last[48] = "";
+  lastCrash(last, sizeof last);
+  sendText(String(b) + "\nlast: " + last + "\n");
+}
+
+static void startWeb() {
+  if (web) return;
+  web = new WebServer(80);
+  web->on("/", pageInfo);
+  web->on("/info", pageInfo);
+  web->on("/log", pageLog);
+  web->on("/crash", pageCrash);
+  web->begin();
+}
+
+static void stopWeb() {
+  if (!web) return;
+  web->stop();
+  delete web;
+  web = nullptr;
+}
+
 static void startOta(uint32_t now) {
   configure();
   wifiIp(ipText, sizeof ipText);
@@ -135,6 +191,7 @@ static void startOta(uint32_t now) {
   // controller runs (open() paused Bluetooth; its stop may not be finished)
   if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) WiFi.setSleep(false);
   ArduinoOTA.begin();
+  startWeb();
   otaRunning = true;
   dbg("ota: listening on %s.local (%s):%u\n", OTA_HOST, ipText, OTA_PORT);
   setState(S_WAIT, now);
@@ -142,6 +199,7 @@ static void startOta(uint32_t now) {
 
 static void stopOta() {
   if (!otaRunning) return;
+  stopWeb();
   ArduinoOTA.end();
   otaRunning = false;
   WiFi.setSleep(true);                                 // always: Bluetooth needs it on the next start
@@ -305,6 +363,7 @@ bool update(uint32_t now) {
         break;
       }
       ArduinoOTA.handle();                             // blocks during an upload (drawn by onProgress)
+      if (web) web->handleClient();
       break;
     case S_UPLOAD:                                     // only seen if an upload ended oddly
       setState(S_WAIT, now);
@@ -315,6 +374,7 @@ bool update(uint32_t now) {
       if (tapL) return leave();
       if (tapR) setState(wifiConnected() ? S_WAIT : S_NOWIFI, now);
       if (wifiConnected()) ArduinoOTA.handle();        // still listening: a new upload may start
+      if (web) web->handleClient();
       else { stopOta(); setState(S_NOWIFI, now); }
       break;
   }

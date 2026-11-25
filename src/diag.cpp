@@ -25,14 +25,45 @@ RTC_NOINIT_ATTR static uint32_t rtcNameMagic;
 RTC_NOINIT_ATTR static char rtcName[16];
 static const char *(*nameOf)(int) = nullptr;
 
+// the last ~2 KB of log lines stay in RAM even with the USB log off, so the
+// OTA screen's diagnostics page (otaui.cpp, /log) can show them over WiFi
+static const size_t RING_SIZE = 2048;
+static char ring[RING_SIZE];
+static size_t ringHead = 0;
+static bool ringFull = false;
+static portMUX_TYPE ringMux = portMUX_INITIALIZER_UNLOCKED;
+
+static void ringPut(const char *s) {
+  portENTER_CRITICAL(&ringMux);                // the update task logs too
+  for (; *s; s++) {
+    ring[ringHead++] = *s;
+    if (ringHead == RING_SIZE) { ringHead = 0; ringFull = true; }
+  }
+  portEXIT_CRITICAL(&ringMux);
+}
+
+size_t dbgRingCopy(char *out, size_t n) {
+  if (!n) return 0;
+  size_t k = 0;
+  portENTER_CRITICAL(&ringMux);
+  size_t start = ringFull ? ringHead : 0, len = ringFull ? RING_SIZE : ringHead;
+  for (size_t i = 0; i < len && k + 1 < n; i++) out[k++] = ring[(start + i) % RING_SIZE];
+  portEXIT_CRITICAL(&ringMux);
+  out[k] = 0;
+  return k;
+}
+
 void dbg(const char *fmt, ...) {
-  if (!usbLog) return;
   char buf[160];
   va_list args;
   va_start(args, fmt);
   vsnprintf(buf, sizeof buf, fmt, args);
   va_end(args);
-  Serial.print(buf);
+  char stamp[16];
+  snprintf(stamp, sizeof stamp, "%7.1f ", millis() / 1000.0f);
+  ringPut(stamp);
+  ringPut(buf);
+  if (usbLog) Serial.print(buf);
 }
 
 bool usbLogOn() { return usbLog; }
