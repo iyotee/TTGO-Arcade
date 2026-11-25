@@ -4,7 +4,9 @@
 // size, the free space and the battery, and offers:
 //   WiFi : streams cartridge.bin from GitHub Pages into the other app slot
 //          (updates.cpp job), with progress, cancel and the SHA-256 check;
-//          without WiFi it explains and opens Settings > WiFi.
+//          without WiFi it explains and opens Settings > WiFi. WiFi runs on
+//          demand: held for a quiet size check when the screen opens, and from
+//          choosing WiFi until the download ends or is left.
 //   Phone: QR code to the companion page; its Install section sends the file
 //          over Bluetooth (ble.cpp, same cartInstall* API), progress shown here.
 //
@@ -19,6 +21,9 @@
 #include <qrcode.h>
 
 namespace wifiui { void open(); bool update(uint32_t now); }
+// ble.cpp: ends a phone install on both sides (page told, Bluetooth state reset).
+// Weak stand-in until ble.cpp has it: the real one replaces it at link time.
+void bleInstallCancel();
 
 namespace cartui {
 
@@ -29,6 +34,8 @@ static const uint8_t QR_VERSION = 4;                  // 33 modules, up to 78 by
 static const int QR_SCALE = 3;
 static const uint32_t FRAME_MS = 50;
 static const uint32_t PHONE_IDLE_MS = 180000;         // the phone side takes a while: no early sleep
+static const uint32_t CHECK_WAIT_MS = 45000;          // the size check gives WiFi this long to connect
+static const char HOLD_DL[] = "cart", HOLD_CHECK[] = "cartchk";   // WiFi holders
 
 enum State { C_INFO, C_NOWIFI, C_WIFIUI, C_RUN, C_PHONE, C_DONE, C_ERROR };
 enum Option { O_PLAY, O_WIFI, O_PHONE, O_BACK };
@@ -38,6 +45,8 @@ static int game = 0;                                  // CART_GAMES index
 static int opts[4], numOpts = 0, sel = 0;
 static bool pressedL = false, pressedR = false;
 static bool phoneWasActive = false;
+static bool checkWanted = false;                      // the size check waits for WiFi
+static bool dlWanted = false;                         // "Get via WiFi" waits for a check to end
 static uint32_t lastFrame = 0, lastInput = 0, lastRead = 0;
 static int mv = 0;
 static char err[40] = "";
@@ -49,6 +58,13 @@ static void setState(State s) {
   state = s;
   lastFrame = 0;
   pressedL = pressedR = false;
+  // off the WiFi path (the WiFi screen holds it itself: it may also go to sleep from there)
+  if (s != C_NOWIFI && s != C_RUN) wifiRelease(HOLD_DL);
+}
+
+static void dropCheck() {
+  checkWanted = false;
+  wifiRelease(HOLD_CHECK);
 }
 
 static void fail(const char *msg) {
@@ -97,11 +113,17 @@ static void infoLine(int y, const char *label, const char *value, uint16_t col) 
 }
 
 static void startWifi() {
+  wifiAcquire(HOLD_DL, true);                         // the user chose WiFi: Bluetooth may give way
+  dlWanted = false;
+  if (busy() && job() == JOB_CHECK) {                 // a check runs (ours or the hourly one): then go on
+    dlWanted = true;
+    setState(C_RUN);
+    return;
+  }
   if (!wifiConnected()) { setState(C_NOWIFI); return; }
   if (tooBig()) { fail("not enough space"); return; }
   char e[32];
   if (start(JOB_CART, e, sizeof e)) setState(C_RUN);
-  else if (busy()) fail("a check is running, retry");
   else fail(e);
 }
 
@@ -119,8 +141,8 @@ static void renderInfo(uint32_t now) {
 
   const Manifest &m = manifest();
   if (m.valid && m.cart.size) fmtSize(v, sizeof v, m.cart.size);
-  else if (busy()) snprintf(v, sizeof v, "checking...");
-  else snprintf(v, sizeof v, wifiConnected() ? "unknown" : "? (no WiFi)");
+  else if (busy() || checkWanted) snprintf(v, sizeof v, "checking...");
+  else snprintf(v, sizeof v, wifiEnabled() && wifiSavedSsid()[0] ? "unknown" : "? (no WiFi)");
   infoLine(54, "Download", v, tooBig() ? errCol() : th.text);
   fmtSize(v, sizeof v, cartSlotSize());
   infoLine(66, "Free space", v, th.text);
@@ -149,8 +171,9 @@ static void renderInfo(uint32_t now) {
 
 static void renderNoWifi(uint32_t now) {
   const Theme &th = theme();
-  drawTigo(67, 100, 48, TIGO_SAD, now, false);
-  centred("No WiFi", 116, 4, th.text);
+  bool ready = wifiEnabled() && wifiSavedSsid()[0];   // just connecting: not a sad "No WiFi"
+  drawTigo(67, 100, 48, ready ? TIGO_WALK : TIGO_SAD, now, false);
+  centred(ready ? "WiFi" : "No WiFi", 116, 4, th.text);
   if (!wifiEnabled()) {
     centred("WiFi is off.", 148, 1, th.textDim);
     centred("R opens the WiFi setup", 160, 1, th.textDim);
@@ -263,30 +286,47 @@ void open(const char *hiKey) {
     play();
     if (state != C_ERROR) return;
   }
-  // learn the size before the user decides (quiet if it can't run now)
-  if (!manifest().valid && wifiConnected() && !busy()) {
-    char e[24];
-    start(JOB_CHECK, e, sizeof e);
-  }
+  // learn the size before the user decides: WiFi comes up for a quiet check
+  // (never pauses Bluetooth or shrinks the screen; nothing happens if it can't run)
+  checkWanted = !manifest().valid && wifiEnabled() && wifiSavedSsid()[0];
+  dlWanted = false;
+  if (checkWanted) wifiAcquireFor(HOLD_CHECK, CHECK_WAIT_MS);
   render(lastInput);
+}
+
+static void dropHolds() {
+  dropCheck();
+  dlWanted = false;
+  wifiRelease(HOLD_DL);
 }
 
 static bool leave() {
   if (state == C_PHONE) {
-    if (cartInstallActive()) cartInstallAbort();      // no half-written cartridge left claiming the slot
+    if (cartInstallActive()) bleInstallCancel();      // no half-written cartridge left claiming the slot
     bleRelease();
   }
   if (busy() && (job() == JOB_CART)) cancel();
+  dropHolds();
   pressedL = pressedR = false;
   return false;
 }
 
+// the quiet size check: once WiFi is up (gives up when the hold runs out)
+static void serviceCheck() {
+  if (!checkWanted) return;
+  if (busy() || !wifiHeldBy(HOLD_CHECK)) { dropCheck(); return; }   // another job runs, or no WiFi came
+  if (!wifiConnected()) return;
+  char e[24];
+  start(JOB_CHECK, e, sizeof e, false);               // the job holds WiFi itself from here
+  dropCheck();
+}
+
 bool update(uint32_t now) {
+  serviceCheck();
   if (state == C_WIFIUI) {                            // Settings > WiFi, nested
     if (!wifiui::update(now)) {
       lastInput = now;
-      if (wifiConnected()) startWifi();
-      else setState(C_NOWIFI);
+      startWifi();                                    // holds WiFi again: downloads, or waits for it
     }
     return true;
   }
@@ -311,6 +351,7 @@ bool update(uint32_t now) {
         if (o == O_PLAY) play();
         else if (o == O_WIFI) startWifi();
         else {
+          dropCheck();                                // Bluetooth needs the memory more
           phoneWasActive = false;
           bleUse(now);
           setState(C_PHONE);
@@ -324,6 +365,11 @@ bool update(uint32_t now) {
       else if (wifiConnected()) startWifi();          // joined meanwhile: go on by itself
       break;
     case C_RUN:
+      if (dlWanted) {                                 // waiting for a check to end first
+        if (tapL || hold) { dlWanted = false; buildOptions(); setState(C_INFO); }
+        else if (!busy()) startWifi();
+        break;
+      }
       if ((tapL || hold) && (phase() == PH_CONNECT || phase() == PH_DOWNLOAD)) cancel();
       if (!busy() && phase() == PH_DONE) setState(C_DONE);
       else if (!busy() && phase() == PH_FAILED) {
@@ -342,7 +388,7 @@ bool update(uint32_t now) {
       }
       phoneWasActive = active;
       if (tapL) {
-        if (active) cartInstallAbort();
+        if (active) bleInstallCancel();               // tells the page and resets the Bluetooth side too
         else return leave();
       }
       break;
@@ -364,6 +410,7 @@ bool update(uint32_t now) {
   uint32_t idleLim = state == C_PHONE ? PHONE_IDLE_MS : idleSleepMs();
   if (!writing && idleLim && (int32_t)(now - lastInput) > (int32_t)idleLim) {
     if (state == C_PHONE) bleRelease();
+    dropHolds();
     goToSleep();                                      // back via the launcher
     return true;
   }

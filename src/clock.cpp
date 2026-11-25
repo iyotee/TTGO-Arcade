@@ -1,5 +1,7 @@
 // Time service: applies the saved time zone and keeps the clock synced with
-// NTP whenever WiFi is up. No controls (see clockapp.cpp for the Clock tool).
+// NTP. WiFi runs on demand: the launcher holds it for the sync at boot when
+// the time is unknown and every 6 h, and lets go once synced or after a
+// minute. No controls (see clockapp.cpp for the Clock tool).
 //
 // The ESP32 RTC keeps counting through deep sleep, so the time survives it;
 // only the TZ setting is lost at boot and is re-applied here. The time can
@@ -34,11 +36,19 @@ static const Zone ZONES[CLOCK_NUM_ZONES] = {
 
 static const time_t RESYNC_S = 6L * 3600;      // SNTP polls hourly by itself; this catches long outages
 static const uint32_t RETRY_MS = 60000;        // restart SNTP if a start got no answer in this time
+static const uint32_t HOLD_MS = 60000;         // WiFi is held this long for a sync at most
+// a sync that got nowhere (no network around) waits this long before the next try
+static const uint32_t TRY_UNSET_MS = 15UL * 60000, TRY_SET_MS = 60UL * 60000;
+static const char HOLDER[] = "clock";
 static const char *PREF_ZONE = "clk_zone";
 
 static bool inited = false, sntpStarted = false;
 static int zone = 0;
 static uint32_t startedAt = 0;
+#if !TTGO_CARTRIDGE
+static uint32_t nextTryAt = 0;                 // the next WiFi hold for a sync
+static bool tried = false;
+#endif
 static volatile bool syncFlag = false;         // set from the lwIP task
 static RTC_DATA_ATTR time_t lastSync = 0;
 static RTC_DATA_ATTR uint8_t lastSrc = CLOCK_SRC_NONE;
@@ -88,6 +98,19 @@ void timeService(uint32_t now) {
     localTimeNow(&tm);
     dbg("time: NTP sync %02d:%02d:%02d %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, ZONES[zone].city);
   }
+#if !TTGO_CARTRIDGE
+  // WiFi's grace time and retries; here because every loop (screensaver too) runs this
+  wifiService(now);
+  bool need = needsSync();
+  if (!need) {
+    if (wifiHeldBy(HOLDER)) wifiRelease(HOLDER);   // synced (NTP or the phone)
+  } else if (!wifiHeldBy(HOLDER) && wifiEnabled() && wifiSavedSsid()[0] &&
+             (!tried || (int32_t)(now - nextTryAt) >= 0)) {
+    tried = true;
+    nextTryAt = now + (timeIsSet() ? TRY_SET_MS : TRY_UNSET_MS);
+    wifiAcquireFor(HOLDER, HOLD_MS);
+  }
+#endif
   if (!wifiConnected() || !needsSync()) return;
   if (!sntpStarted || (int32_t)(now - startedAt) >= (int32_t)RETRY_MS) startSntp(now);
 }
@@ -140,7 +163,12 @@ void clockFmtOffset(char *buf, size_t n) {
 
 time_t clockLastSync() { return timesvc::lastSync; }
 ClockSource clockSyncSource() { return (ClockSource)timesvc::lastSrc; }
-bool clockSyncing() { return timesvc::sntpStarted && wifiConnected() && timesvc::needsSync(); }
+bool clockSyncing() {
+#if !TTGO_CARTRIDGE
+  if (wifiHeldBy(timesvc::HOLDER) && timesvc::needsSync()) return true;   // WiFi coming up for it
+#endif
+  return timesvc::sntpStarted && wifiConnected() && timesvc::needsSync();
+}
 
 void clockNoteSynced(ClockSource src) {
   timesvc::ensureInit();

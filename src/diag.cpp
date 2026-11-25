@@ -3,6 +3,8 @@
 // The crash record survives the reset: the active menu item is kept in RTC
 // memory, which a crash or watchdog reset doesn't clear, and on the next boot
 // the reset reason plus that item are saved to NVS for the Settings screen.
+// The item's name is kept too: a crash in the Big Games cartridge is read by
+// the launcher, whose item list (and so its indexes) is not the cartridge's.
 
 #include "common.h"
 #include <stdarg.h>
@@ -17,6 +19,11 @@ static bool usbLog = false;
 static const uint32_t RTC_MAGIC = 0xC0DEBEEF;           // tells real values from power-on garbage
 RTC_NOINIT_ATTR static uint32_t rtcMagic;
 RTC_NOINIT_ATTR static int32_t rtcItem;
+// after the older fields, so their places stay the same for older images
+static const uint32_t RTC_NAME_MAGIC = 0x4E414D45;      // "NAME": rtcName is valid
+RTC_NOINIT_ATTR static uint32_t rtcNameMagic;
+RTC_NOINIT_ATTR static char rtcName[16];
+static const char *(*nameOf)(int) = nullptr;
 
 void dbg(const char *fmt, ...) {
   if (!usbLog) return;
@@ -40,6 +47,7 @@ void setUsbLog(bool on) {
 }
 
 void initDiag(const char *(*itemName)(int)) {
+  nameOf = itemName;
   usbLog = prefs.getBool("usblog", false);
   if (usbLog) Serial.begin(115200);
 
@@ -58,10 +66,15 @@ void initDiag(const char *(*itemName)(int)) {
       break;
     default: break;
   }
-  const char *item = rtcMagic == RTC_MAGIC ? itemName(rtcItem) : "?";
+  // the name written by the firmware that ran (launcher or cartridge), else our own list
+  const char *item = "?";
+  if (rtcMagic == RTC_MAGIC) {
+    rtcName[sizeof rtcName - 1] = 0;
+    item = rtcNameMagic == RTC_NAME_MAGIC && rtcName[0] ? rtcName : itemName(rtcItem);
+  }
   if (kind) {
     char buf[40];
-    snprintf(buf, sizeof buf, "%s in %s (b%u)", kind, item, (unsigned)FW_BUILD);
+    snprintf(buf, sizeof buf, "%s: %s b%u", kind, item, (unsigned)FW_BUILD);   // "! crash: Settings b5" fits 135 px
     prefs.putString("lastcrash", buf);
     if (why != ESP_RST_POWERON) crashRecOnBoot(item);   // backtrace from the panic handler, if any
   }
@@ -71,6 +84,8 @@ void initDiag(const char *(*itemName)(int)) {
 
 void noteActiveItem(int item) {
   rtcItem = item;
+  snprintf(rtcName, sizeof rtcName, "%s", nameOf ? nameOf(item) : "");
+  rtcNameMagic = RTC_NAME_MAGIC;
   rtcMagic = RTC_MAGIC;
 }
 

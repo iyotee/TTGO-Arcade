@@ -1710,7 +1710,12 @@ void update(uint32_t now) {
     ticked = true;
   }
 
-  if (state != ST_PLAY && idleTooLong(now, lastInput)) {
+  // any state, play included: the intro card starts a depth by itself, so a
+  // dive nobody plays would otherwise never sleep. No save to resume from:
+  // the run ends there, its score still counts for the best.
+  if (idleTooLong(now, lastInput)) {
+    dbg("crypt: idle (state %d), sleeping\n", (int)state);
+    saveHigh();                                    // a run in progress: its score so far
     leave();
     goToSleep();
     return;

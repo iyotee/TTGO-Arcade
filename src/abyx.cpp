@@ -2102,7 +2102,8 @@ static void drawTitle(uint32_t t) {
   const char *lab[3];
   int n;
   titleItems(lab, n);
-  int my = land ? 30 : 160, step = land ? 18 : 17;
+  // portrait: up to three rows between the ledge (ends at 158) and the hints (208)
+  int my = land ? 30 : 159, step = land ? 18 : 16;
   for (int i = 0; i < n; i++) {
     bool sel = i == titleSel;
     int y = my + i * step;
@@ -2122,8 +2123,8 @@ static void drawTitle(uint32_t t) {
     landHints("choose / walk >", "next / < walk");
   } else {
     text(buf, fb.w / 2, 73, 1, 0xBDF7, 1, 0x0000);
-    text("hold L / R: walk", fb.w / 2, 203, 1, 0xFFFF, 1, 0x0000);
-    text("L+R: jump, hold=high", fb.w / 2, 214, 1, 0xFFFF, 1, 0x0000);
+    text("hold L / R: walk", fb.w / 2, 208, 1, 0xFFFF, 1, 0x0000);
+    text("L+R: jump, hold=high", fb.w / 2, 218, 1, 0xFFFF, 1, 0x0000);
     text("L next    R choose", fb.w / 2, 228, 1, 0xFFE0, 1, 0x0000);
   }
 }
@@ -2299,8 +2300,15 @@ void update(uint32_t now) {
       tickPlay(in);
       dirty = true;
     }
-    // a power banner waits for a press; nobody there: save and doze off
-    if (state == PLAY && mode == M_BANNER && idleTooLong(now, lastInput)) { writeSave(); leaveGame(); goToSleep(); return; }
+    // nobody there (running or a power banner waiting for a press): save and
+    // doze off; the map needs both buttons held, so it never gets here
+    if (state == PLAY && idleTooLong(now, lastInput)) {
+      dbg("abyx: idle in play, saving and sleeping\n");
+      writeSave();
+      leaveGame();
+      goToSleep();
+      return;
+    }
     if (quitReq) {                                 // held both on the map: save and leave
       quitReq = false;
       writeSave();

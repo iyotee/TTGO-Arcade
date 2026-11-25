@@ -80,6 +80,10 @@ static bool havePhone = false;
 // speech bubble
 static char btxt[96];
 static uint32_t bubbleAt = 0, bubbleLen = 0;
+// a phone message can outgrow one bubble (4 lines): it is read out in parts,
+// "..." marking each cut, phonePos = where the next part starts
+static char phoneTxt[96];
+static int phonePos = 0;
 
 // ---------------- helpers ----------------
 static float frand(float a, float b) { return a + (b - a) * (esp_random() % 10000) / 10000.0f; }
@@ -206,6 +210,58 @@ static void sayContext(uint32_t now) {
   say(now, 0, "%s", randomLine());
 }
 
+// Lines tigo::drawBubble needs for s: the same greedy wrap (116 px, font 2,
+// one over-long word cut), without its 4-line stop.
+static int bubbleLines(const char *s) {
+  const int MAXW = 116;
+  char tmp[100];
+  int len = min((int)strlen(s), (int)sizeof tmp - 1), pos = 0, n = 0;
+  while (pos < len) {
+    int best = -1, bestW = 0, i = pos;
+    while (true) {
+      while (i < len && s[i] != ' ') i++;
+      int k = i - pos;
+      memcpy(tmp, s + pos, k); tmp[k] = 0;
+      int w = spr.textWidth(tmp, 2);
+      if (w > MAXW && best >= 0) break;
+      best = k; bestW = w;
+      if (i >= len) break;
+      i++;
+    }
+    if (bestW > MAXW)
+      while (best > 1) { tmp[--best] = 0; if (spr.textWidth(tmp, 2) <= MAXW) break; }
+    n++;
+    pos += max(best, 1);
+    while (pos < len && s[pos] == ' ') pos++;
+  }
+  return n;
+}
+
+// The next part of phoneTxt in the bubble: all that is left if it fits in
+// 4 lines, else the longest start that fits with "..." (cut at a space if
+// one works, else inside the word); a later part opens with "...".
+static void sayPhonePart(uint32_t now) {
+  const char *rest = phoneTxt + phonePos;
+  const char *lead = phonePos ? "..." : "";
+  int len = strlen(rest), cut = len;
+  char part[sizeof btxt];
+  snprintf(part, sizeof part, "%s%s", lead, rest);
+  if (bubbleLines(part) > 4) {
+    cut = 0;
+    for (int pass = 0; pass < 2 && !cut; pass++)
+      for (int i = len - 1; i > 0; i--) {
+        if (pass == 0 && rest[i] != ' ') continue;
+        snprintf(part, sizeof part, "%s%.*s...", lead, i, rest);
+        if (bubbleLines(part) <= 4) { cut = i; break; }
+      }
+    if (!cut) cut = 1;                     // can't happen with 116 px lines
+    snprintf(part, sizeof part, "%s%.*s...", lead, cut, rest);
+  }
+  phonePos += cut;
+  while (phoneTxt[phonePos] == ' ') phonePos++;
+  say(now, 2500 + strlen(part) * 50, "%s", part);
+}
+
 // ---------------- behaviour ----------------
 static void start(Act a, uint32_t now) {
   act = a; phase = 0; actAt = phaseAt = now; counter = 0;
@@ -218,7 +274,9 @@ static void start(Act a, uint32_t now) {
     case A_DANCE: actLen = 4200; say(now, 0, irand(2) ? "Charging! Wheee!" : "Zap zap! Power dance!"); break;
     case A_HIDE: actLen = 2600; break;
     case A_PHONE:
-      say(now, 6500, "Phone says: %s", phoneMsg);
+      snprintf(phoneTxt, sizeof phoneTxt, "Phone says: %s", phoneMsg);
+      phonePos = 0;
+      sayPhonePart(now);
       havePhone = false;
       actLen = bubbleLen;
       break;
@@ -327,7 +385,10 @@ static void think(uint32_t now, float dt) {
 
     case A_PHONE:
       pose = e < 1200 ? TIGO_HAPPY : TIGO_IDLE;
-      if (e > actLen) pick(now);
+      if (e > actLen) {
+        if (phoneTxt[phonePos]) { sayPhonePart(now); actAt = now; actLen = bubbleLen; }   // the next part
+        else pick(now);
+      }
       break;
 
     case A_EAT: {

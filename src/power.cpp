@@ -123,7 +123,14 @@ void goToSleep() {
     timeService(now);
     bleService(now);
     uint32_t lim = sleepDelayMs();
-    if (lim && (int32_t)(now - start) >= (int32_t)lim) deepSleepNow();
+    if (lim && (int32_t)(now - start) >= (int32_t)lim) {
+#if !TTGO_CARTRIDGE
+      // an install that began behind the screensaver: wait another sleep delay
+      if (bleInstallActive()) start = now;
+      else
+#endif
+        deepSleepNow();
+    }
     delay(2);
   }
   setBrightness(level, false);
@@ -137,6 +144,7 @@ void goToSleep() {
 
 void deepSleepNow() {
   dbg("going to sleep\n");
+  noteActiveItem(-1);                  // a wake by the RST button is no "reset in <game>"
   wifiShutdown();
   if (usbLogOn()) Serial.flush();
   spr.fillSprite(TFT_BLACK);

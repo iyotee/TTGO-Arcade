@@ -6,6 +6,12 @@
 //   Hold L + R      : charge the power (the meter swings up and down),
 //                     release to shoot
 //   Ball in hand    : L / R slide the cue ball, press L + R to put it down
+//   Keep L + R held ~5 s (aiming or ball in hand): no shot, a "Quit game?"
+//                     box instead (Tap L = no, back to the table, Tap R = yes,
+//                     back to the menu). A shot is always released well before:
+//                     the meter is back at zero every ~1.5 s.
+// Idle sleep: after the usual idle delay without a press, only while a player
+// should act (never while balls roll or during the CPU's turn).
 // Title: Tap L = 1 or 2 players, Tap R = start (1 player) or next (2 players).
 // Opponent menu (2 players): Tap L = next entry, Tap R = pick
 //   (vs Friend, vs CPU Easy / Normal / Hard, Back).
@@ -56,6 +62,9 @@ static const float FOLLOW = 0.22f;                            // natural roll: t
 static const float MAX_SHOT = 10.5f, MIN_SHOT = 0.35f;
 static const float MAX_STEP = 1.5f;                           // sub-step length: well under a ball radius
 static const int POWER_PERIOD = 96;                           // the power meter goes up and down in ~1.5 s
+// L + R kept held this long: the quit question instead of a shot (over three
+// swings of the meter, so no real shot gets there); the hint shows 2 s before
+static const int QUIT_HOLD_T = 5000 / TICK_MS, QUIT_HINT_T = QUIT_HOLD_T - 2000 / TICK_MS;
 static const int DROP_TICKS = 16, BANNER_TICKS = 80;
 
 // ---------------- balls ----------------
@@ -95,6 +104,8 @@ static int cpuT = 0;                                          // ticks in the cu
 static float cpuAim = 0, cpuPower = 0, cpuPlaceX = TBL_MX;
 static float aim = -PI / 2, power = 0, placeX = TBL_MX;
 static bool charging = false, waitRelease = false;
+// the "Quit game?" box: open, presses that started on it, and "yes" taken
+static bool quitAsk = false, quitArmL = false, quitArmR = false, quitNow = false;
 static int powerT = 0, holdTL = 0, holdTR = 0, animT = 0;
 
 // shot bookkeeping
@@ -362,6 +373,7 @@ static void newGame() {
   score = 0;
   banT = 0;
   aim = -PI / 2;
+  quitAsk = quitNow = false;
   startPlace();
   cpuStage = CP_IDLE;
   if (vsCpu()) banner("YOU", "to break", TFT_YELLOW);
@@ -1076,6 +1088,14 @@ static void handleInput(uint32_t now, int eL, int eR) {
   }
   if (charging) {
     powerT++;
+    if (powerT >= QUIT_HOLD_T) {                               // held on and on: not a shot, the quit question
+      charging = false;
+      power = 0;
+      quitAsk = true;
+      quitArmL = quitArmR = false;                            // the held buttons' releases do nothing
+      dbg("pool: quit asked");
+      return;
+    }
     int f = powerT % POWER_PERIOD;
     power = f < POWER_PERIOD / 2 ? f / (POWER_PERIOD / 2.0f) : (POWER_PERIOD - f) / (POWER_PERIOD / 2.0f);
     if (!l || !r) {
@@ -1126,6 +1146,19 @@ static void handleInput(uint32_t now, int eL, int eR) {
   }
 }
 
+// the "Quit game?" box: L = no, R = yes, each on the release of a press made on it
+static void quitInput(int eL, int eR) {
+  if (eL == 1) quitArmL = true;
+  if (eR == 1) quitArmR = true;
+  if (eL == 2 && quitArmL) {
+    quitAsk = false;
+    waitRelease = bL.stable || bR.stable;                     // the other button first, if still down
+  } else if (eR == 2 && quitArmR) {
+    quitAsk = false;
+    quitNow = true;
+  }
+}
+
 static void tick(uint32_t now, int eL, int eR) {
   animT++;
   if (banT > 0) banT--;
@@ -1134,6 +1167,7 @@ static void tick(uint32_t now, int eL, int eR) {
     if (++drops[i].t >= DROP_TICKS) drops[i] = drops[--nDrops];
     else i++;
   }
+  if (quitAsk) { quitInput(eL, eR); return; }                 // the clock stops while it asks
   if (shots > 0) playTicks++;
   if (phase == PH_ROLL) {
     physicsTick();
@@ -1464,7 +1498,8 @@ static void drawHint() {
     } else if (phase == PH_PLACE) {
       t = "CPU places the ball";
     }
-  } else if (phase == PH_PLACE) t = "L/R move   L+R place";
+  } else if (charging && powerT >= QUIT_HINT_T) t = "keep holding: quit";
+  else if (phase == PH_PLACE) t = "L/R move   L+R place";
   else if (phase == PH_AIM && shots == 0) t = charging ? "release to shoot" : "L/R aim   L+R power";
   if (!t) return;
   spr.setTextDatum(TC_DATUM);
@@ -1508,6 +1543,29 @@ static void drawDuoOver() {
   spr.drawString("again", 80, 154, 2);
 }
 
+static void drawQuitBox() {
+  const Theme &th = theme();
+  const int x = 12, y = 100, w = 111, h = 50;
+  uint16_t edge = th.neon ? th.frameSel : TFT_YELLOW;
+  if (th.neon) {
+    spr.fillRoundRect(x, y, w, h, 6, th.panel);
+    drawThemedBox(x, y, w, h, 6, edge, true);
+  } else {
+    spr.fillRect(x, y, w, h, TFT_BLACK);
+    spr.drawRect(x, y, w, h, edge);
+  }
+  spr.setTextDatum(TC_DATUM);
+  spr.setTextColor(th.text);
+  spr.drawString("Quit game?", 67, y + 7, 2);
+  spr.setTextDatum(TL_DATUM);
+  spr.setTextColor(th.keyHint);
+  spr.drawString("L", 24, y + 27, 2);
+  spr.drawString("R", 76, y + 27, 2);
+  spr.setTextColor(th.neon ? th.accent : TFT_GREEN);
+  spr.drawString("no", 36, y + 27, 2);
+  spr.drawString("yes", 88, y + 27, 2);
+}
+
 static void drawGame() {
   drawTable(state == PLAY && phase == PH_PLACE);
   drawAllBalls();
@@ -1527,6 +1585,7 @@ static void drawGame() {
   if (state == PLAY) drawHint();
   drawHud();
   if (state == PLAY) drawBanner();
+  if (state == PLAY && quitAsk) drawQuitBox();
   if (state == GAMEOVER) {
     if (twoPlayers) {
       drawDuoOver();
@@ -1601,21 +1660,21 @@ static void drawTitle() {
     spr.drawString(modes[m], 67, y + 11, 2);
   }
   spr.setTextColor(themeSoft());
-  spr.drawString(twoPlayers ? "8-ball: a friend or the CPU" : "clear the table", 67, 156, 1);
+  spr.drawString(twoPlayers ? "8-ball: friend or CPU" : "clear the table", 67, 156, 1);
 
   spr.setTextDatum(TL_DATUM);
-  const char *keys[] = {"Hold L/R", "Tap L/R", "Hold L+R", "release"};
-  const char *acts[] = {"aim", "fine aim", "power", "shoot"};
-  for (int i = 0; i < 4; i++) {
+  const char *keys[] = {"Hold L/R", "Tap L/R", "Hold L+R", "release", "L+R 5 s"};
+  const char *acts[] = {"aim", "fine aim", "power", "shoot", "quit game"};
+  for (int i = 0; i < 5; i++) {
     spr.setTextColor(th.keyHint);
-    spr.drawString(keys[i], 14, 168 + i * 10, 1);
+    spr.drawString(keys[i], 14, 166 + i * 9, 1);
     spr.setTextColor(th.text);
-    spr.drawString(acts[i], 72, 168 + i * 10, 1);
+    spr.drawString(acts[i], 72, 166 + i * 9, 1);
   }
   spr.setTextDatum(TC_DATUM);
   spr.setTextColor(themeSoft());
   snprintf(buf, sizeof buf, "Best %lu (1 player)", (unsigned long)hiScore);
-  spr.drawString(buf, 67, 210, 1);
+  spr.drawString(buf, 67, 213, 1);
   drawThemedFooter("mode", twoPlayers ? "next" : "start", 224);
 }
 
@@ -1651,6 +1710,7 @@ void begin() {
   cpuStage = CP_IDLE;
   state = TITLE;
   armed = false;
+  quitAsk = quitNow = false;
   lastInput = millis();
   dirty = true;
 }
@@ -1668,10 +1728,26 @@ void update(uint32_t now) {
     // the CPU's look-ahead: a slice of the search per frame, never more
     if (cpuStage == CP_THINK && !searchDone) cpuSearch(CPU_BUDGET_US);
     if ((int32_t)(now - lastTick) > 200) lastTick = now - TICK_MS;   // no catching up after a stall
-    while (state == PLAY && (int32_t)(now - lastTick) >= (int32_t)TICK_MS) {
+    while (state == PLAY && !quitNow && (int32_t)(now - lastTick) >= (int32_t)TICK_MS) {
       lastTick += TICK_MS;
       tick(now, qL.pop(), qR.pop());
       dirty = true;
+    }
+    if (quitNow) {                                            // "Quit game?" answered yes
+      quitNow = false;
+      dbg("pool: game left for the menu");
+      returnToMenu();
+      return;
+    }
+    // rolling balls and the CPU's turn count as activity: doze off only when a
+    // player should act and nobody has touched a button for the idle delay
+    if (phase == PH_ROLL || cpuTurn()) {
+      lastInput = now;
+    } else if (idleTooLong(now, lastInput)) {
+      dbg("pool: idle in play, sleeping");
+      goToSleep();
+      lastInput = millis();                                   // came back without sleeping (BLE install): wait again
+      return;
     }
   } else if (state == TITLE) {
     qL.clear();

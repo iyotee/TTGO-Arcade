@@ -86,10 +86,25 @@ int numGames();
 const char *gameInfo(int idx, const char **hiKey);
 
 // ---------------- WiFi (wifi.cpp) ----------------
+// On demand: the radio only runs while someone holds it (it costs ~50 KB of
+// heap), then after a ~20 s grace the driver is shut down. Main loop only.
 enum WpsState { WPS_IDLE, WPS_RUNNING, WPS_GOT_CREDS, WPS_FAILED, WPS_TIMEOUT };
-void initWifi();                      // in setup(), after prefs.begin(): rejoins the saved network if WiFi is on
-bool wifiEnabled();
-void setWifiEnabled(bool on);         // saved; off also powers the radio down
+enum WifiStatus { WIFI_ST_OFF, WIFI_ST_IDLE, WIFI_ST_CONNECTING, WIFI_ST_CONNECTED };
+void initWifi();                      // in setup(), after prefs.begin(): reads the setting, starts nothing
+bool wifiEnabled();                   // the setting: WiFi allowed
+void setWifiEnabled(bool on);         // saved; off also powers the radio down at once
+// who: a short constant name; acquiring twice is one hold. user = a screen the
+// user opened for WiFi: Bluetooth may pause (setting kept) when memory is short
+void wifiAcquire(const char *who, bool user = false);
+void wifiAcquireFor(const char *who, uint32_t ms);   // a hold that ends by itself (or with wifiRelease)
+void wifiRelease(const char *who);
+bool wifiHeldBy(const char *who);
+bool wifiIdleOff();                   // radio off now if nobody holds it; true if that freed its memory
+void wifiService(uint32_t now);       // every loop pass (timeService() calls it): grace, retries
+bool wifiBusy();                      // radio on (held or in its grace time)
+int wifiStatus();                     // WifiStatus
+const char *wifiStatusText();         // "Off", "Idle", "Connecting", "Connected"
+bool wifiLowMemory();                 // the last start failed: not enough heap
 bool wifiConnected();
 const char *wifiSavedSsid();          // "" if none
 int wifiRssi();                       // dBm, -127 when not connected

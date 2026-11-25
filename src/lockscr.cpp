@@ -11,6 +11,7 @@
 
 #include "common.h"
 #include "lockscr.h"
+#include "ble.h"
 
 namespace lockscr {
 
@@ -429,7 +430,12 @@ static Result step(uint32_t now) {
   // idle: the lock screen sleeps (counting from the end of a wait), the flows give up
   uint32_t idleFrom = lastInput;
   if (lockedOut && (int32_t)(lockoutEnd - idleFrom) > 0) idleFrom = lockoutEnd;
-  if ((int32_t)(now - idleFrom) > (int32_t)IDLE_MS) {
+  bool idle = (int32_t)(now - idleFrom) > (int32_t)IDLE_MS;
+#if !TTGO_CARTRIDGE
+  // the phone is writing a cartridge: the lock screen waits instead of sleeping
+  if (idle && mode == M_LOCK && bleInstallActive()) { lastInput = now; idle = false; }
+#endif
+  if (idle) {
     if (mode == M_LOCK) deepSleepNow();
     return RES_CANCEL;
   }

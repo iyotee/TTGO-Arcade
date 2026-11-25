@@ -7,7 +7,8 @@
 //   Waiting   : Tap L / Hold L back
 //   Uploading : buttons ignored (the upload runs inside ArduinoOTA.handle())
 //   Error     : Tap R try again · Tap L / Hold L back
-// The board never goes to sleep while this screen is open. An upload goes into
+// The board never goes to sleep while this screen is open. WiFi is held (and
+// Bluetooth paused, its setting untouched) while it is. An upload goes into
 // the other app slot, where the Big Games cartridge lives: it is forgotten
 // (cart.h) and can be downloaded again afterwards.
 
@@ -18,6 +19,7 @@
 #include <ArduinoOTA.h>
 #include <Update.h>
 #include "ble.h"
+#include "esp_bt.h"
 
 namespace otaui {
 
@@ -27,7 +29,8 @@ static const uint16_t OTA_PORT = 3232;
 static const uint32_t FRAME_MS = 50, PROGRESS_FRAME_MS = 120;
 
 static State state = S_NOWIFI;
-static bool otaRunning = false, configured = false, sleepOff = false;
+static const char HOLDER[] = "ota";                    // WiFi holder while the screen is open
+static bool otaRunning = false, configured = false;
 static bool pressedL = false, pressedR = false;
 static uint32_t stateAt = 0, lastFrame = 0, lastProgressFrame = 0;
 static uint32_t upDone = 0, upTotal = 0;
@@ -128,11 +131,9 @@ static void configure() {
 static void startOta(uint32_t now) {
   configure();
   wifiIp(ipText, sizeof ipText);
-  // Bluetooth pauses (it holds heap and needs modem sleep on), then modem sleep
-  // can go off: uploads crawl with it
-  bleSuspend(true);
-  sleepOff = true;
-  WiFi.setSleep(false);
+  // uploads crawl with modem sleep, but WiFi needs it while the Bluetooth
+  // controller runs (open() paused Bluetooth; its stop may not be finished)
+  if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) WiFi.setSleep(false);
   ArduinoOTA.begin();
   otaRunning = true;
   dbg("ota: listening on %s.local (%s):%u\n", OTA_HOST, ipText, OTA_PORT);
@@ -143,9 +144,7 @@ static void stopOta() {
   if (!otaRunning) return;
   ArduinoOTA.end();
   otaRunning = false;
-  if (sleepOff && wifiConnected()) WiFi.setSleep(true);
-  sleepOff = false;
-  bleSuspend(false);
+  WiFi.setSleep(true);                                 // always: Bluetooth needs it on the next start
   dbg("ota: stopped\n");
 }
 
@@ -264,6 +263,9 @@ void open() {
   pressedL = pressedR = false;
   errText[0] = 0;
   upDone = upTotal = 0;
+  // Bluetooth pauses first (it holds heap and needs modem sleep on), so WiFi has room
+  bleSuspend(true);
+  wifiAcquire(HOLDER, true);
   if (wifiConnected()) startOta(now);
   else setState(S_NOWIFI, now);
   render(now);
@@ -271,6 +273,8 @@ void open() {
 
 static bool leave() {
   stopOta();
+  wifiRelease(HOLDER);
+  bleSuspend(false);                                   // back as it was: the setting never changed
   pressedL = pressedR = false;
   return false;
 }

@@ -126,15 +126,16 @@ static void renderRow(int r, int y) {
       drawValueRow(y, sel, "Change PIN", ">", theme().keyHint, lockscr::enabled());
       break;
     case ROW_WIFI:
-      drawValueRow(y, sel, "WiFi", wifiConnected() ? "On  >" : wifiEnabled() ? "...  >" : "Off  >",
-                   wifiConnected() ? theme().ok : wifiEnabled() ? TFT_ORANGE : softCol());
+      // On = allowed (it connects on demand); "..." while it is connecting
+      drawValueRow(y, sel, "WiFi", wifiStatus() == WIFI_ST_CONNECTING ? "...  >" : wifiEnabled() ? "On  >" : "Off  >",
+                   wifiStatus() == WIFI_ST_CONNECTING ? TFT_ORANGE : wifiEnabled() ? theme().ok : softCol());
       break;
     case ROW_UPDATES:                                   // "New" once a newer launcher is known
       drawValueRow(y, sel, "Updates", updates::updateAvailable() ? "New  >" : ">",
-                   updates::updateAvailable() ? theme().ok : wifiConnected() ? theme().keyHint : softCol());
+                   updates::updateAvailable() ? theme().ok : wifiEnabled() ? theme().keyHint : softCol());
       break;
-    case ROW_OTA:                                       // needs WiFi: brighter once connected
-      drawValueRow(y, sel, "OTA update", ">", wifiConnected() ? theme().keyHint : softCol());
+    case ROW_OTA:                                       // needs WiFi: brighter when it is allowed
+      drawValueRow(y, sel, "OTA update", ">", wifiEnabled() ? theme().keyHint : softCol());
       break;
     case ROW_BLE:
       drawValueRow(y, sel, "Bluetooth", bleConnected() ? "Linked" : bleEnabled() ? "On" : "Off",
@@ -219,8 +220,13 @@ static void renderMain() {
 
   // last crash, if any (small, so it doesn't crowd the screen)
   if (lastCrash(buf, sizeof buf)) {
+    // one line of font 1 (22 chars, 135 px), e.g. "! crash: Settings b5";
+    // too long: the build goes first (the crash report has it), then the end
     char line[48];
-    snprintf(line, sizeof line, "! %s", buf);   // e.g. "! watchdog in Flappy"
+    snprintf(line, sizeof line, "! %s", buf);
+    char *sp = strrchr(line, ' ');
+    if (strlen(line) > 22 && sp && (sp[1] == 'b' || sp[1] == '(')) *sp = 0;
+    line[22] = 0;
     spr.setTextDatum(TC_DATUM);
     spr.setTextColor(TFT_ORANGE);
     spr.drawString(line, 67, 213, 1);

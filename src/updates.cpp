@@ -2,9 +2,11 @@
 //
 // The CI (.github/workflows/build.yml) publishes fw/manifest.json, firmware.bin
 // (launcher) and cartridge.bin (Big Games) on GitHub Pages for every push to
-// main. The launcher checks the manifest once an hour while WiFi is connected
-// (only from the launcher, Settings and the cartridge screen, never in a
-// game); a newer launcher shows a badge in the launcher and "New" on the
+// main. The launcher checks the manifest once an hour (only from the launcher,
+// Settings and the cartridge screen, never in a game): WiFi runs on demand, so
+// the check holds it, waits for the connection, runs and lets go; the time of
+// the last check survives deep sleep, so waking the board doesn't check again.
+// A newer launcher shows a badge in the launcher and "New" on the
 // Updates row. Installing streams the image into the other app slot (cart.h
 // writer: SHA-256 against the manifest, image validation), then reboots.
 // A dev build (FW_BUILD 0) never nags; a manual install still works.
@@ -31,12 +33,15 @@ namespace updates {
 static const char MANIFEST_URL[] = "https://iyotee.github.io/TTGO-Arcade/fw/manifest.json";
 static const char FW_BASE[] = "https://iyotee.github.io/TTGO-Arcade/fw/";   // for relative URLs
 static const uint32_t CHECK_EVERY_MS = 3600000UL;    // hourly
-static const uint32_t FIRST_CHECK_MS = 20000UL;      // after WiFi comes up
+static const uint32_t FIRST_CHECK_MS = 20000UL;      // after boot, when none ran in the last hour
+static const uint32_t CONNECT_WAIT_MS = 45000UL;     // the hourly check gives WiFi this long to connect
 static const uint32_t RETRY_MS = 600000UL;           // after a failed check
+static const uint32_t NO_WIFI_RETRY_MS = 1800000UL;  // the network was out of reach: spare the battery
 static const uint32_t STALL_MS = 20000UL;            // no data for this long: give up
 // TLS needs ~40-50 KB (two 16 KB records + handshake) plus the task's stack
 static const uint32_t NEED_FREE_HEAP = 62000, NEED_BLOCK = 24000;
 static const uint32_t TASK_STACK = 10240;
+static const uint32_t CHECK_HOLD_MS = 120000;        // a check's WiFi hold ends by itself after this
 static const size_t MANIFEST_MAX = 2048;
 
 // prefs keys (<= 15 chars)
@@ -45,8 +50,13 @@ static const char K_LATEST[] = "upd_lb", K_LATEST_CART[] = "upd_cb", K_AUTO[] = 
 static Manifest man;                                 // zero-initialised: valid = false
 static uint32_t latestFw = 0, latestCart = 0;
 static bool autoOn = true;
-static uint32_t nextCheckAt = 0, wifiUpAt = 0, checkedAt = 0;
+static uint32_t nextCheckAt = 0, checkedAt = 0;
 static bool checkedOnce = false;
+static RTC_DATA_ATTR time_t rtcCheckedAt = 0;        // time() of the last good check, kept through deep sleep
+// the hourly check's WiFi hold: waiting for the connection, then the job itself
+static const char HOLDER[] = "upd", JOB_HOLDER[] = "updjob";   // every job holds WiFi until it ends
+static bool bgWaiting = false;
+static uint32_t bgSince = 0;
 
 // ---- job state: written by the task, read by the main loop ----
 static volatile int curJob = JOB_NONE, curPhase = PH_IDLE;
@@ -59,7 +69,7 @@ static char body[MANIFEST_MAX + 1];
 static size_t bodyLen = 0;
 static uint8_t chunk[1024];
 // restored when the job ends
-static bool bleWasOn = false, sleepWasOff = false;
+static bool blePaused = false, sleepWasOff = false;
 
 static void setErr(const char *fmt, int v = 0) {
   snprintf(errText, sizeof errText, fmt, v);
@@ -321,10 +331,10 @@ static void restoreSprite() {
 
 static void restoreRadios() {
   restoreSprite();
-  if (sleepWasOff && wifiConnected()) WiFi.setSleep(true);
+  WiFi.setSleep(true);                               // also when WiFi dropped meanwhile: the next start needs it
   sleepWasOff = false;
-  if (bleWasOn) setBleEnabled(true);                 // put the saved setting back
-  bleWasOn = false;
+  if (blePaused) bleSuspend(false);                  // the saved setting was never touched
+  blePaused = false;
 }
 
 static void takeOver(const Manifest &m) {
@@ -344,10 +354,10 @@ bool start(int j, char *err, size_t n, bool user) {
   if (!heapOk()) {
     // only something the user asked for may stop Bluetooth or shrink the screen for a while
     if (!user) { snprintf(err, n, "low memory"); return false; }
-    if (bleRunning()) {
-      bleWasOn = bleEnabled();
-      if (bleWasOn) setBleEnabled(false);
-      bleRelease();
+    // suspend, not setBleEnabled(false): a reboot before restoreRadios() keeps the setting
+    if (bleRunning() && !bleSuspended()) {
+      bleSuspend(true);
+      blePaused = true;
       delay(100);
       dbg("upd: Bluetooth paused for the download, heap %u\n", ESP.getFreeHeap());
     }
@@ -371,11 +381,15 @@ bool start(int j, char *err, size_t n, bool user) {
   cancelReq = wasCancelled = false;
   taskEnded = manifestOk = false;
   running = true;
+  // a check ends by itself even if no service() wraps it up (a game started); downloads run on their screen
+  if (j == JOB_CHECK) wifiAcquireFor(JOB_HOLDER, CHECK_HOLD_MS);
+  else wifiAcquire(JOB_HOLDER);
   // core 1 with the loop task: core 0's idle task is watched by the task watchdog
   if (xTaskCreatePinnedToCore(jobTask, "upd", TASK_STACK, (void *)(intptr_t)j, 1, nullptr, 1) != pdPASS) {
     running = false;
     curPhase = PH_FAILED;
     restoreRadios();
+    wifiRelease(JOB_HOLDER);
     snprintf(err, n, "no memory for the task");
     return false;
   }
@@ -388,27 +402,57 @@ void service(uint32_t now) {
     running = false;
     wasCancelled = cancelReq;
     if (manifestOk) takeOver(fresh);                 // every job starts with a fresh manifest
-    if (curJob == JOB_CHECK) nextCheckAt = now + (taskOk ? CHECK_EVERY_MS : RETRY_MS);
+    if (curJob == JOB_CHECK) {
+      nextCheckAt = now + (taskOk ? CHECK_EVERY_MS : RETRY_MS);
+      if (taskOk) {
+        rtcCheckedAt = time(nullptr) | 1;
+        if (bgWaiting) { bgWaiting = false; wifiRelease(HOLDER); }   // a manual check just did it
+      }
+    }
     restoreRadios();
+    wifiRelease(JOB_HOLDER);
     curPhase = taskOk ? PH_DONE : PH_FAILED;
   }
 
-  // hourly check while WiFi is up
-  if (!wifiConnected()) { wifiUpAt = 0; return; }
-  if (!wifiUpAt) {
-    wifiUpAt = now ? now : 1;
-    if (!checkedOnce) nextCheckAt = now + FIRST_CHECK_MS;
+  // the hourly check: hold WiFi, wait for the connection, run, let go
+  if (running) return;
+  if (!bgWaiting) {
+    if (!autoOn || (int32_t)(now - nextCheckAt) < 0) return;
+    if (!wifiEnabled() || !wifiSavedSsid()[0]) return;   // due: runs once WiFi may connect
+    bgWaiting = true;
+    bgSince = now;
+    wifiAcquireFor(HOLDER, CONNECT_WAIT_MS + 5000);  // timed: a game started meanwhile can't keep it up
+    return;
   }
-  if (!autoOn || running || (int32_t)(now - nextCheckAt) < 0) return;
-  char err[24];
-  if (!start(JOB_CHECK, err, sizeof err, false)) nextCheckAt = now + RETRY_MS;
-  else nextCheckAt = now + CHECK_EVERY_MS;           // reset again when it ends
+  if (wifiConnected()) {
+    bgWaiting = false;
+    char err[24];
+    if (start(JOB_CHECK, err, sizeof err, false)) {
+      nextCheckAt = now + CHECK_EVERY_MS;            // set again when it ends
+    } else {
+      dbg("upd: hourly check not started: %s\n", err);
+      nextCheckAt = now + RETRY_MS;
+    }
+    wifiRelease(HOLDER);                             // the job holds it now
+  } else if (!autoOn || !wifiEnabled() || !wifiHeldBy(HOLDER) || (int32_t)(now - bgSince) > (int32_t)CONNECT_WAIT_MS) {
+    dbg("upd: no WiFi for the hourly check\n");
+    bgWaiting = false;
+    wifiRelease(HOLDER);
+    nextCheckAt = now + NO_WIFI_RETRY_MS;
+  }
 }
 
 void begin() {
   latestFw = prefs.getUInt(K_LATEST, 0);
   latestCart = prefs.getUInt(K_LATEST_CART, 0);
   autoOn = prefs.getBool(K_AUTO, true);
+  // a check in the last hour (before a deep sleep): the next one when that hour is up
+  uint32_t now = millis();
+  nextCheckAt = now + FIRST_CHECK_MS;
+  if (rtcCheckedAt) {
+    time_t age = time(nullptr) - rtcCheckedAt;
+    if (age >= 0 && age < (time_t)(CHECK_EVERY_MS / 1000)) nextCheckAt = now + CHECK_EVERY_MS - (uint32_t)age * 1000;
+  }
 }
 
 const Manifest &manifest() { return man; }
@@ -523,6 +567,8 @@ static uint32_t lastFrame = 0, lastInput = 0, doneAt = 0;
 static int mv = 0;
 static char note[32] = "";                           // one-line status under the builds
 static bool noteBad = false;
+static bool checkWanted = false;                     // "Check now" waits for WiFi to connect
+static const char HOLD_UI[] = "updui";               // WiFi is held while this screen is open
 
 static bool canInstall() {
   uint32_t l = latestBuild();
@@ -568,7 +614,7 @@ static void renderMain(uint32_t now) {
   spr.setTextColor(th.text);
   spr.drawString(buf, 121, 46, 2);
   uint32_t l = latestBuild();
-  if (busy() && job() == JOB_CHECK) {
+  if (checkWanted || (busy() && job() == JOB_CHECK)) {
     char dots[4] = "...";
     dots[(now / 400) % 4] = 0;
     snprintf(buf, sizeof buf, "checking%s", dots);
@@ -587,7 +633,9 @@ static void renderMain(uint32_t now) {
     spr.drawString(note, 67, 92, 1);
   } else {
     int32_t ago = checkedAgoS();
-    if (!wifiConnected()) snprintf(buf, sizeof buf, "WiFi not connected");
+    if (!wifiEnabled()) snprintf(buf, sizeof buf, "WiFi is off");
+    else if (!wifiSavedSsid()[0]) snprintf(buf, sizeof buf, "no WiFi network saved");
+    else if (!wifiConnected()) snprintf(buf, sizeof buf, "%s", wifiFailReason()[0] ? wifiFailReason() : "WiFi connecting...");
     else if (ago < 0) snprintf(buf, sizeof buf, "not checked yet");
     else if (ago < 120) snprintf(buf, sizeof buf, "checked just now");
     else if (ago < 7200) snprintf(buf, sizeof buf, "checked %ld min ago", (long)(ago / 60));
@@ -596,7 +644,7 @@ static void renderMain(uint32_t now) {
     spr.drawString(buf, 67, 92, 1);
   }
 
-  drawRow(R_CHECK, "Check now", nullptr, 0, wifiConnected());
+  drawRow(R_CHECK, "Check now", nullptr, 0, wifiEnabled());
   char lb[16] = "-";
   if (canInstall()) snprintf(lb, sizeof lb, "b%u", (unsigned)l);
   drawRow(R_INSTALL, "Install", lb, th.ok, canInstall());
@@ -668,6 +716,8 @@ void open() {
   row = R_CHECK;
   pressedL = pressedR = false;
   note[0] = 0;
+  checkWanted = false;
+  wifiAcquire(HOLD_UI, true);
   mv = batteryMilliVolts();
   lastInput = millis();
   render(lastInput);
@@ -675,6 +725,8 @@ void open() {
 
 static bool leave() {
   pressedL = pressedR = false;
+  checkWanted = false;
+  wifiRelease(HOLD_UI);                              // a job still running holds WiFi itself
   return false;
 }
 
@@ -682,14 +734,16 @@ static void act(uint32_t now) {
   char err[32];
   switch (row) {
     case R_CHECK:
-      if (!wifiConnected()) setNote("connect WiFi first", true);
+      if (!wifiEnabled()) setNote("turn WiFi on first", true);
+      else if (!wifiSavedSsid()[0]) setNote("set up WiFi first", true);
+      else if (!wifiConnected()) { checkWanted = true; note[0] = 0; }   // starts once connected
       else if (busy()) setNote("already busy", true);
       else if (!start(JOB_CHECK, err, sizeof err)) setNote(err, true);
       else note[0] = 0;
       break;
     case R_INSTALL:
       if (!canInstall()) setNote(latestBuild() ? "already up to date" : "check first", true);
-      else if (!wifiConnected()) setNote("connect WiFi first", true);
+      else if (!wifiConnected()) setNote(wifiEnabled() ? "wait for WiFi" : "turn WiFi on first", true);
       else { mv = batteryMilliVolts(); state = U_CONFIRM; }
       break;
     case R_AUTO:
@@ -720,6 +774,12 @@ bool update(uint32_t now) {
       if (wasChecking && !checking && phase() == PH_FAILED) setNote(error(), true);
       else if (wasChecking && !checking) setNote(updateAvailable() ? "update available!" : "up to date", false);
       wasChecking = checking;
+      if (checkWanted && !wifiEnabled()) checkWanted = false;
+      if (checkWanted && wifiConnected() && !busy()) {
+        char err[32];
+        checkWanted = false;
+        if (!start(JOB_CHECK, err, sizeof err)) setNote(err, true);
+      }
       if (tapL) { row = (row + 1) % NUM_ROWS; note[0] = 0; }
       if (tapR) {
         if (row == R_BACK) return leave();
@@ -757,7 +817,8 @@ bool update(uint32_t now) {
       break;
   }
 
-  if ((state == U_MAIN || state == U_ERROR) && idleTooLong(now, lastInput)) {
+  if ((state == U_MAIN || state == U_CONFIRM || state == U_ERROR) && idleTooLong(now, lastInput)) {
+    leave();                                           // the screen is gone: let WiFi go
     goToSleep();                                       // back via the launcher
     return true;
   }

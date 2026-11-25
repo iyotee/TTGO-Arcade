@@ -5,6 +5,8 @@
 //            Tap L next char · Hold L previous (repeats) · Tap R type it
 //            Hold R jump to the next group (abc / ABC / 123 / #+= / done: OK DEL ESC)
 //   Connecting / WPS : Tap L cancel
+// WiFi runs on demand (wifi.cpp): this screen holds it while open, so the
+// status card shows the saved network connecting or connected.
 
 #include "common.h"
 #include "themeui.h"
@@ -28,6 +30,7 @@ static int passLen = 0, wheel = 0;
 static uint32_t phaseAt = 0, lastInput = 0, lastAnim = 0;
 static bool connectOk = false, connectFailed = false;
 static bool dirty = true, pressedL = false, pressedR = false;
+static const char HOLDER[] = "wifiui";
 
 // ---------------- password wheel ----------------
 static const char *GROUPS[] = {
@@ -140,8 +143,10 @@ static void renderMain() {
     snprintf(buf, sizeof buf, "%d dBm", wifiRssi());
     spr.drawString(buf, 12, 72, 1);
   } else {
+    // held while open: connecting, unless the heap is too short for the driver
     spr.setTextColor(TFT_ORANGE);
-    spr.drawString(wifiSavedSsid()[0] ? "Connecting..." : "Not connected", 12, 36, 2);
+    const char *st = wifiLowMemory() ? "Low memory" : wifiSavedSsid()[0] ? "Connecting..." : "Not connected";
+    spr.drawString(st, 12, 36, 2);
     spr.setTextColor(softCol());
     if (wifiSavedSsid()[0]) fitText(wifiSavedSsid(), 12, 56, 112, 2);
     else spr.drawString("Scan or use WPS", 12, 56, 2);
@@ -298,7 +303,7 @@ static void renderConnect(uint32_t now) {
     spr.setTextColor(TFT_RED);
     spr.drawString("Failed", 67, 70, 4);
     spr.setTextColor(softCol());
-    const char *why = screen == WPS && wifiWpsState() == WPS_TIMEOUT ? "no WPS router answered"
+    const char *why = screen == WPS && wifiWpsState() == WPS_TIMEOUT ? "no router answered"
                     : screen == WPS && wifiWpsState() == WPS_FAILED  ? "WPS was refused"
                     : wifiFailReason()[0] ? wifiFailReason() : "timed out";
     spr.drawString(why, 67, 110, 2);
@@ -391,8 +396,18 @@ void open() {
   screen = MAIN;
   row = 0;
   pressedL = pressedR = false;
+  scanning = false;
   lastInput = millis();
   dirty = true;
+  wifiAcquire(HOLDER, true);
+}
+
+// the screen goes away (back, or idle sleep): stop what runs and let WiFi go
+static void leave() {
+  if (scanning) { scanning = false; wifiScanFree(); }
+  if (screen == WPS) wifiStopWps();
+  screen = MAIN;
+  wifiRelease(HOLDER);
 }
 
 static BothHold upHold;                            // Hold L + R: move up a list
@@ -414,7 +429,7 @@ bool update(uint32_t now) {
       if ((pressedL || pressedR) && bothHoldStep(upHold, now)) { row = (row + NUM_MAIN - 1) % NUM_MAIN; dirty = true; }
       if (tapL) { row = (row + 1) % NUM_MAIN; dirty = true; }
       if (tapR) {
-        if (row == M_BACK) return false;
+        if (row == M_BACK) { leave(); return false; }
         if (row == M_TOGGLE) setWifiEnabled(!wifiEnabled());
         else if (row == M_SCAN) startScan();
         else if (row == M_WPS) startWps();
@@ -427,7 +442,7 @@ bool update(uint32_t now) {
       if (scanning) {
         int n = wifiScanResult();
         if (n >= 0 || n == -2) { scanning = false; if (n > 0) collectScan(n); dirty = true; }
-        if (tapL) { wifiScanFree(); backToMain(); }
+        if (tapL) { scanning = false; wifiScanFree(); backToMain(); }   // else the screen never sleeps
         break;
       }
       int total = nNets + 2;
@@ -509,7 +524,11 @@ bool update(uint32_t now) {
 
   // nothing should put the board to sleep while it is talking to a router
   bool busy = scanning || ((screen == CONNECT || screen == WPS) && !connectOk && !connectFailed);
-  if (!busy && idleTooLong(now, lastInput)) goToSleep();
+  if (!busy && idleTooLong(now, lastInput)) {
+    leave();
+    goToSleep();                                   // back via the launcher
+    return true;
+  }
 
   bool animating = busy || screen == MAIN;          // spinner, live status
   if (animating && (int32_t)(now - lastAnim) >= (screen == MAIN ? 500 : 60)) { lastAnim = now; dirty = true; }

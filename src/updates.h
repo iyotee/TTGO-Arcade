@@ -28,7 +28,7 @@ const Manifest &manifest();
 uint32_t latestBuild();               // newest launcher build seen (kept in prefs), 0 = unknown
 uint32_t latestCartBuild();           // same for the cartridge
 bool updateAvailable();               // a newer launcher exists (never on a dev build, FW_BUILD 0)
-bool autoCheck();                     // hourly check while WiFi is connected (saved)
+bool autoCheck();                     // hourly check, WiFi held for it on demand (saved)
 void setAutoCheck(bool on);
 int32_t checkedAgoS();                // seconds since the last successful check, -1 = none this boot
 
@@ -36,8 +36,9 @@ int32_t checkedAgoS();                // seconds since the last successful check
 enum Job { JOB_NONE, JOB_CHECK, JOB_CART, JOB_FW };
 enum Phase { PH_IDLE, PH_CONNECT, PH_DOWNLOAD, PH_VERIFY, PH_DONE, PH_FAILED };
 // false (err filled) when it can't start: busy, no WiFi, not enough memory.
-// A download may stop Bluetooth for its duration (TLS needs the heap); the
-// setting is restored afterwards.
+// A download may pause Bluetooth for its duration (TLS needs the heap) with
+// bleSuspend(): the saved setting is never touched. Every job holds WiFi
+// (wifiAcquire) until service() wraps it up.
 // user = asked for on screen (may pause Bluetooth / use an 8-bit screen buffer);
 // the hourly background check passes false and simply waits for a better time
 bool start(int job, char *err, size_t errN, bool user = true);

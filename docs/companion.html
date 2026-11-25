@@ -727,7 +727,7 @@
       }
       if (!e) throw new Error('the board did not answer');
       if (e.op === 0x8F) throw fatal(errText(e));
-      const chunk = Math.max(16, Math.min(e.chunk || 16, 512)), win = Math.max(chunk, e.window || chunk);
+      const chunk = Math.max(1, Math.min(e.chunk || 15, 512)), win = Math.max(chunk, e.window || chunk);
       let pos = e.resume, acked = e.resume, stalls = 0;
       const t0 = performance.now(), from = acked;
       state(pos ? 'Resuming at ' + fmtSize(pos) + '...' : 'Sending ' + c.name + '...');

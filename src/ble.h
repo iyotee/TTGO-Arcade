@@ -52,3 +52,9 @@ bool bleInstallActive();              // PREPARING, RECEIVING or CHECKING: don't
 int bleInstallPercent();              // 0..100 of the bytes written to flash
 void bleInstallBytes(uint32_t *done, uint32_t *total);
 const char *bleInstallMessage();      // short text for the screen: "Installed", "Low battery", ...
+// The board cancels a phone install: the page gets an error, the slot write is
+// aborted (no cartInstallAbort() needed, nor wanted), FAILED then IDLE. No-op when idle.
+void bleInstallCancel();
+// The Bluetooth controller is up (or half up): WiFi must keep modem sleep, so
+// don't call WiFi.setSleep(false) while this is true (the WiFi driver aborts)
+bool bleControllerOn();

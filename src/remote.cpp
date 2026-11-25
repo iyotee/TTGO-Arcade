@@ -157,7 +157,7 @@ static void render(uint32_t now) {
     spr.setTextColor(TFT_LIGHTGREY);
     spr.drawString("On your phone:", 67, 54, 1);
     spr.setTextColor(C_SAND);
-    spr.drawString("Bluetooth > TTGO-Arcade", 67, 66, 1);
+    spr.drawString("Bluetooth>TTGO-Arcade", 67, 66, 1);   // 21 chars: fits 135 px
   } else {
     static const char *HINT[NUM_MODES] = {"L or R: take a photo", "hold R: play/pause", "L/R: arrow keys"};
     spr.setTextColor(C_SAND);

@@ -59,6 +59,10 @@
 #include "clock.h"
 #include "ble.h"
 
+// wifi.cpp (WiFi on demand): turns WiFi off when nobody holds it, true if it did.
+// Weak stand-in until it lands, so this links either way.
+bool wifiIdleOff();
+
 namespace {
 
 const char *const DEV_NAME = "TTGO-Arcade";
@@ -90,6 +94,7 @@ const uint32_t RING_SIZE = 8192;                 // received, not yet written to
 const uint32_t ACK_STEP = 2048;
 const uint32_t WRITE_BUDGET = 4096;              // flash bytes per loop pass, keeps the screen alive
 const uint32_t RX_TIMEOUT_MS = 60000, ORPHAN_MS = 90000;
+const uint32_t RESULT_MS = 10000;                // DONE / FAILED shown this long, then back to IDLE
 const int MIN_INSTALL_BATTERY = 15;              // % when not on USB
 const uint8_t OP_BEGIN = 0x01, OP_DATA = 0x02, OP_END = 0x03, OP_ABORT = 0x04, OP_STATUS = 0x05;
 const uint8_t EV_READY = 0x81, EV_ACK = 0x82, EV_DONE = 0x83, EV_RESEND = 0x84, EV_STATUS = 0x85, EV_ERROR = 0x8F;
@@ -188,6 +193,7 @@ uint32_t holdUntil = 0;                          // keeps the stack up briefly a
 bool holdOn = false;
 uint32_t lastAck = 0, lastRxSeen = 0, lastRxAt = 0, stepAt = 0, orphanAt = 0;
 bool orphanSeen = false;
+uint32_t endedAt = 0;                            // DONE / FAILED since then; 0 = no result pending
 char iMsg[28] = "";
 
 uint32_t le32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
@@ -518,7 +524,7 @@ void sendError(uint8_t code, const char *text) {
 void sendReady(uint32_t resume, uint16_t conn) {
   uint16_t mtu = server ? server->getPeerMTU(conn) : 23;
   int chunk = (int)mtu - 3 - 5;                  // ATT write header, then our opcode + offset
-  if (chunk < 16) chunk = 16;
+  if (chunk < 1) chunk = 1;                      // never above mtu - 8: a bigger packet wouldn't fit
   uint8_t b[12] = {EV_READY};
   put32(b + 1, resume);
   put32(b + 5, RING_SIZE);
@@ -540,6 +546,12 @@ void sendStatus() {
 
 void setMsg(const char *s) { snprintf(iMsg, sizeof iMsg, "%s", s); }
 
+// a session ended (DONE / FAILED): the result goes away after RESULT_MS
+void noteEnded() {
+  endedAt = millis();
+  if (!endedAt) endedAt = 1;
+}
+
 // leaves the session: frees the ring once the host task can no longer touch it
 void closeSession(uint8_t state) {
   portENTER_CRITICAL(&mux);
@@ -551,6 +563,7 @@ void closeSession(uint8_t state) {
   free(r);
   holdOn = true;                                 // let the last reply go out before a stop
   holdUntil = millis() + 3000;
+  noteEnded();
   if (wasOpen && state != BLE_INST_DONE) cartInstallAbort();
   if (server && iConn != NO_CONN && !iOrphan) server->updateConnParams(iConn, 24, 48, 0, 500);   // relax the link again
 }
@@ -565,6 +578,13 @@ void failInstall(uint8_t code, const char *text) {
 
 bool installActive() {
   return iState == BLE_INST_PREPARING || iState == BLE_INST_RECEIVING || iState == BLE_INST_CHECKING;
+}
+
+void backToIdle() {
+  if (installActive()) return;
+  iState = BLE_INST_IDLE;
+  endedAt = 0;
+  iMsg[0] = 0;
 }
 
 void handleBegin(uint32_t now) {
@@ -603,6 +623,7 @@ void handleBegin(uint32_t now) {
   iConn = conn;
   iOrphan = false;
   rxNext = flashed = 0;
+  endedAt = 0;
   iState = BLE_INST_PREPARING;                   // the slot is erased on a later pass, after the screen says so
   stepAt = now;
   setMsg("Preparing...");
@@ -619,6 +640,7 @@ void prepare(uint32_t now) {
   if (!cartInstallBegin(iSize, iSha, iBuild, err, sizeof err)) {
     free(r);
     iState = BLE_INST_FAILED;                    // nothing begun: no abort needed
+    noteEnded();
     setMsg(err[0] ? err : "Can't start");
     sendError(ERR_FLASH, iMsg);
     dbg("ble: cartInstallBegin failed: %s\n", iMsg);
@@ -639,6 +661,7 @@ void prepare(uint32_t now) {
 }
 
 void installService(uint32_t now) {
+  if (endedAt && !installActive() && (int32_t)(now - endedAt) >= (int32_t)RESULT_MS) backToIdle();
   if (encErrWaiting) { encErrWaiting = false; sendError(ERR_NOT_ENCRYPTED, "Pair the phone first"); }
   if (badWaiting) {
     badWaiting = false;
@@ -668,6 +691,7 @@ void installService(uint32_t now) {
     free(r);
     holdOn = true;
     holdUntil = millis() + 3000;
+    noteEnded();
     if (ok) {
       setMsg("Installed");
       uint8_t b[1] = {EV_DONE};
@@ -746,6 +770,13 @@ void startStack(uint32_t now) {
   if (running) return;
   if (failAt && (int32_t)(now - failAt) < (int32_t)RETRY_MS) return;
   uint32_t heapBefore = ESP.getFreeHeap(), block = ESP.getMaxAllocHeap();
+  if ((heapBefore < MIN_FREE_HEAP || block < MIN_BLOCK) && wifiIdleOff()) {
+    // WiFi idle holds ~40 KB: it was switched off, see what that freed (once per attempt)
+    delay(30);
+    dbg("ble: heap %u (block %u) low, wifi turned off\n", heapBefore, block);
+    heapBefore = ESP.getFreeHeap();
+    block = ESP.getMaxAllocHeap();
+  }
   if (heapBefore < MIN_FREE_HEAP || block < MIN_BLOCK) {
     if (errText[0] == 0) dbg("ble: not started, heap %u (block %u) too low\n", heapBefore, block);
     noteFail(now, "Low memory");
@@ -758,8 +789,10 @@ void startStack(uint32_t now) {
     noteFail(now, "Radio busy");
     return;
   }
-  // WiFi and Bluetooth share the radio: the WiFi driver aborts unless modem sleep is on
-  if (WiFi.getMode() != WIFI_OFF) WiFi.setSleep(true);
+  // WiFi and Bluetooth share the radio: the WiFi driver aborts unless modem sleep is on.
+  // Always: with WiFi off it only records the mode, so a WiFi started later (while the
+  // controller runs) can't come up with the WIFI_PS_NONE an OTA / download left
+  WiFi.setSleep(true);
 
   NimBLEDevice::init(DEV_NAME);
   NimBLEDevice::setSecurityAuth(true, false, true);          // bonding, no MITM ("just works"), secure connections
@@ -853,6 +886,7 @@ void stopStack(uint32_t now) {
   keyInput = mediaInput = statusChr = instChr = nullptr;
   running = false;
   failAt = 0;
+  backToIdle();                                  // no page left to show a result to
   portENTER_CRITICAL(&mux);
   conns = 0;
   hidSubs = 0;
@@ -1019,6 +1053,15 @@ bool bleTapKey(uint8_t usage, uint8_t modifiers) {
 
 int bleInstallState() { return iState; }
 bool bleInstallActive() { return installActive(); }
+
+// the board's own Cancel: same end as the page's ABORT (the page is told, the slot
+// write is aborted once by closeSession, FAILED then IDLE after RESULT_MS)
+void bleInstallCancel() {
+  if (!installActive()) return;
+  failInstall(ERR_ABORTED, "Cancelled");
+}
+
+bool bleControllerOn() { return esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE; }
 
 void bleInstallBytes(uint32_t *done, uint32_t *total) {
   if (done) *done = flashed;

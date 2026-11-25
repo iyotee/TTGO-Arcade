@@ -13,8 +13,8 @@
 // Abyx and Crypt live in the "Big Games" cartridge (cart.h): greyed in the
 // Games list with "Download" until it is installed in the other app slot,
 // then starting one reboots into the cartridge, which comes back here.
-// Updates (updates.h): an hourly manifest check while WiFi is connected; a
-// newer launcher shows an arrow badge in the launcher header.
+// Updates (updates.h): an hourly manifest check (WiFi runs on demand, see
+// wifi.cpp); a newer launcher shows an arrow badge in the launcher header.
 //
 // High scores and settings are stored in NVS (survive power-off).
 // On menu / title / game-over screens, after the screensaver delay of
@@ -300,7 +300,7 @@ static void drawBadges(uint32_t now, int y, bool updateBadge) {
     uint16_t bcol = pct > 40 ? TFT_GREEN : pct > 15 ? TFT_YELLOW : TFT_RED;
     spr.fillRect(8, y + 2, max(1, 12 * pct / 100), 5, bcol);
   }
-  if (wifiConnected()) {
+  if (wifiConnected()) {                          // on demand: only while something uses it
     // a modern fan: a dot and three round-capped arcs, lit by signal strength
     const Theme &th = theme();
     uint16_t on = th.neon ? th.accent : TFT_CYAN, off = themeFade(70, on);
@@ -662,9 +662,9 @@ void showGames() { showView(VIEW_GAMES, millis()); }
 void returnToMenu() { launcher::backFromItem(); }
 
 // ---------------- main ----------------
-// A cartridge session that did not end through returnToMenu(): diag.cpp read
-// the cartridge's RTC record with the launcher's item list, so name the game
-// from the hand-over key instead.
+// A cartridge session that did not end through returnToMenu(): name the game
+// from the hand-over key (diag.cpp takes the name the cartridge left in RTC
+// memory, but a cartridge older than that left only its own item index).
 static void noteCartCrash(const char *before, const char *hiKey) {
   const char *kind = nullptr;
   switch (esp_reset_reason()) {
@@ -681,7 +681,7 @@ static void noteCartCrash(const char *before, const char *hiKey) {
   if (!kind) kind = "reset";
   int gi = cartGameIndex(hiKey);
   char buf[40];
-  snprintf(buf, sizeof buf, "%s in %s", kind, gi >= 0 ? CART_GAMES[gi].name : CART_TITLE);
+  snprintf(buf, sizeof buf, "%s: %s", kind, gi >= 0 ? CART_GAMES[gi].name : CART_TITLE);
   prefs.putString("lastcrash", buf);
 }
 
@@ -697,7 +697,7 @@ void setup() {
   dbg("launcher build %u%s\n", (unsigned)FW_BUILD, back == CART_RET_CLEAN ? ", back from the cartridge" : "");
 
   initBacklight();
-  initWifi();
+  initWifi();                      // reads the setting only: WiFi comes up when something holds it
   initBle();
   updates::begin();
   launcher::begin();               // remembered category and item, lists scrolled to them
