@@ -170,6 +170,7 @@ void bootHardware() {
   }
 
   prefs.begin("tetris", false);
+  if (!prefs.getBool("fullcolor", true)) setScreenFullColor(false, false);   // the user picked Low colours
 }
 
 int bothHoldStep(BothHold &h, uint32_t now) {
@@ -183,4 +184,25 @@ int bothHoldStep(BothHold &h, uint32_t now) {
   if ((int32_t)(now - h.next) < 0) return 0;
   h.next = now + 160;
   return 1;
+}
+
+bool screenFullColor() { return spr.getColorDepth() == 16; }
+
+// Full = 16-bit sprite (65k colours, 64.8 KB), Low = 8-bit (256 colours, 32 KB
+// back for WiFi / Bluetooth / downloads). Switches at once, no reboot.
+bool setScreenFullColor(bool full, bool save) {
+  if (save) prefs.putBool("fullcolor", full);
+  uint8_t want = full ? 16 : 8;
+  if (spr.getColorDepth() == want) return true;
+  int w = spr.width(), h = spr.height();
+  spr.deleteSprite();
+  spr.setColorDepth(want);
+  if (spr.createSprite(w, h)) {
+    dbg("screen: %u-bit, heap %u\n", want, ESP.getFreeHeap());
+    return true;
+  }
+  spr.setColorDepth(8);                          // no room for 16 bits right now
+  spr.createSprite(w, h);
+  dbg("screen: no room for 16-bit, heap %u\n", ESP.getFreeHeap());
+  return false;
 }

@@ -333,7 +333,7 @@ static void shrinkSprite() {
 static void restoreSprite() {
   if (!spriteSmall) return;
   spriteSmall = false;
-  recreateSprite(16);
+  setScreenFullColor(prefs.getBool("fullcolor", true), false);   // back to what the user chose
 }
 
 static void restoreRadios() {

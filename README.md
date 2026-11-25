@@ -265,6 +265,7 @@ Open it in **Chrome or Edge on Android or on a desktop** (it uses Web Bluetooth,
 |---|---|---|
 | **Brightness** | 5 levels | PWM backlight level |
 | **Theme** | `Original` / `Neon` (default `Original`) | UI look and Tigo's outfit (see *Two Tigos*) |
+| **Colors** | `Full` / `Low` (default `Full`) | Full = 65 000 colours; Low = 256 colours and 32 KB more RAM for WiFi, Bluetooth and downloads. Switches at once; a download that runs short of memory may switch to Low for its duration |
 | **Screensaver** | `Off`, `5s`, `8s`, `10s`, `15s`, `20s`, `30s`, `1m`, `2m`, `5m` (default `15s`) | Idle time before Tigo's screensaver |
 | **Sleep** | `5s`, `8s`, `10s`, `15s`, `20s`, `30s`, `1m`, `2m`, `5m`, `10m`, `Never` (default `1m`) | Time spent in the screensaver before deep sleep, or idle time before deep sleep when the screensaver is `Off` |
 | **PIN lock** | `Off` / `On` (default `Off`) | Ask for the PIN at boot, on wake from deep sleep and when leaving the screensaver |
@@ -276,6 +277,7 @@ Open it in **Chrome or Edge on Android or on a desktop** (it uses Web Bluetooth,
 | **USB log** | `On` / `Off` | Diagnostic serial logging (`115200` baud) |
 | **Reset scores >** | submenu | Clear **All games** or any individual game's best score (with confirmation) |
 | **Crash report >** | `none` / `!` | The last crash as a QR code (`Tap R` QR / text, `Tap L` forget, `Hold L` back) |
+| **Restart** | | Restarts the board (back to the launcher) |
 | **Back to menu** | | Return to the launcher |
 
 - **WiFi >**: **WiFi** `On` / `Off` (saved: whether WiFi is *allowed*), **Scan networks** (strongest first, lock = password), **WPS connect** (press the WPS button on your router within 2 min: no typing), **Forget network**. Passwords are typed on a character wheel: `Tap L` next · `Hold L` previous · `Tap R` type · `Hold R` next group (`abc` / `ABC` / `123` / `#+=` / `OK DEL ESC`), or sent from the Companion page. **WiFi runs on demand**: it only connects for the hourly update check, the clock sync, the WiFi / OTA / Updates screens, cartridge downloads and credentials sent from the phone, then switches fully off about 20 s after the last user (this frees ~50 KB of memory for Bluetooth and HTTPS, and saves the battery). The WiFi badge shows in the launcher only while it is connected. `Off` means WiFi never starts.

@@ -19,8 +19,8 @@ namespace wifiui { void open(); bool update(uint32_t now); }
 
 namespace settings {
 
-enum Row { ROW_BRIGHTNESS, ROW_THEME, ROW_SAVER, ROW_SLEEP, ROW_PIN, ROW_CHANGEPIN, ROW_WIFI, ROW_UPDATES, ROW_OTA,
-           ROW_BLE, ROW_USBLOG, ROW_RESET, ROW_CRASH, ROW_BACK, NUM_ROWS };
+enum Row { ROW_BRIGHTNESS, ROW_THEME, ROW_COLORS, ROW_SAVER, ROW_SLEEP, ROW_PIN, ROW_CHANGEPIN, ROW_WIFI, ROW_UPDATES, ROW_OTA,
+           ROW_BLE, ROW_USBLOG, ROW_RESET, ROW_CRASH, ROW_RESTART, ROW_BACK, NUM_ROWS };
 enum Screen { SCR_MAIN, SCR_RESET, SCR_CONFIRM, SCR_WIFI, SCR_OTA, SCR_UPDATES, SCR_CRASH };
 
 static Screen screen = SCR_MAIN;
@@ -112,6 +112,12 @@ static void renderRow(int r, int y) {
     }
     case ROW_THEME:
       drawValueRow(y, sel, "Theme", themeName(themeIndex()), theme().neon ? theme().frameSel : TFT_CYAN);
+      break;
+    case ROW_COLORS:                                    // Low frees 32 KB (also set by a download that ran short)
+      drawValueRow(y, sel, "Colors", screenFullColor() ? "Full" : "Low", screenFullColor() ? theme().ok : TFT_ORANGE);
+      break;
+    case ROW_RESTART:
+      drawValueRow(y, sel, "Restart", ">", theme().keyHint);
       break;
     case ROW_SAVER:
       drawValueRow(y, sel, "Screensaver", saverLabel(), saverOption() ? TFT_CYAN : softCol());
@@ -237,6 +243,8 @@ static void renderMain() {
                   : row == ROW_CHANGEPIN              ? (lockscr::enabled() ? "change" : "-")
                   : row == ROW_USBLOG || row == ROW_BLE ? "toggle"
                   : row == ROW_RESET || row == ROW_WIFI || row == ROW_OTA || row == ROW_UPDATES || row == ROW_CRASH ? "open"
+                  : row == ROW_COLORS                 ? "change"
+                  : row == ROW_RESTART                ? "restart"
                                                         : "back";
   drawThemedFooter("next", act);
 }
@@ -429,6 +437,19 @@ void update(uint32_t now) {
       if (row == ROW_USBLOG) setUsbLog(!usbLogOn());
       else if (row == ROW_BRIGHTNESS) setBrightness((brightnessLevel() + 1) % NUM_BRIGHTNESS, true);
       else if (row == ROW_THEME) setThemeIndex((themeIndex() + 1) % NUM_THEMES);   // redrawn below, at once
+      else if (row == ROW_COLORS) setScreenFullColor(!screenFullColor(), true);    // stays Low if 16-bit won't fit
+      else if (row == ROW_RESTART) {
+        const Theme &th = theme();
+        spr.fillSprite(th.bg);
+        drawTigo(67, 120, 56, TIGO_SLEEP, now, false);
+        spr.setTextDatum(TC_DATUM);
+        spr.setTextColor(th.text);
+        spr.drawString("Restarting...", 67, 140, 2);
+        spr.pushSprite(0, 0);
+        noteActiveItem(-1);                              // a wanted restart, not a crash
+        delay(600);
+        ESP.restart();
+      }
       else if (row == ROW_SAVER) setSaverOption((saverOption() + 1) % NUM_SAVER_OPTS, true);
       else if (row == ROW_SLEEP) setSleepDelayOption((sleepDelayOption() + 1) % NUM_SLEEPDLY_OPTS, true);
       else if (row == ROW_BLE) setBleEnabled(!bleEnabled());

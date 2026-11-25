@@ -198,6 +198,10 @@ void drawGameOverBox(const char *title, uint32_t score, uint32_t best, bool newH
 // that started on the screen.
 enum EndChoice { END_NONE, END_PLAY, END_MENU };
 EndChoice startOrEnd(bool gameOver, int eL, int eR, bool &armed);
+// Screen colours: Full (16-bit sprite) or Low (8-bit, 32 KB less RAM), switched
+// at once; save = remember it (Settings > Colors). False if 16-bit didn't fit.
+bool screenFullColor();
+bool setScreenFullColor(bool full, bool save);
 // Lists: Hold L + R steps UP (backwards), repeating while held. Returns 1 when
 // a step is due now. Both presses are marked consumed so their releases do
 // nothing; screens must ignore a release whose button is consumed.
