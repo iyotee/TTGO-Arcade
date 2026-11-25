@@ -14,6 +14,10 @@ const char *clockZoneLabel(int idx);      // "Europe/Zurich" (max 22 chars, font
 const char *clockZoneTz(int idx);         // POSIX TZ string
 int clockUtcOffsetMin();                  // current local offset, DST included (0 if unknown)
 void clockFmtOffset(char *buf, size_t n); // "UTC+1", "UTC+5:30", "UTC-7"
+// Today's local sunrise and sunset at the zone's city, in minutes after local
+// midnight (DST included), worked out once a day. False while the time is unknown.
+// Where the sun stays up all day: 0 and 1440; where it stays down: both 720.
+bool clockSun(int *riseMin, int *setMin);
 
 // Sync status. The last sync survives deep sleep (RTC memory), like the time itself.
 enum ClockSource { CLOCK_SRC_NONE, CLOCK_SRC_NTP, CLOCK_SRC_PHONE };

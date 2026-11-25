@@ -1,5 +1,11 @@
 // Screensaver: Tigo's beach, a little living tamagotchi scene (Neon theme:
-// the same beach at night, under a neon-lit skyline with glowing signs).
+// the same beach under a neon-lit skyline with glowing signs).
+//
+// The sky follows the real sun of the time zone's city (clockSun): night, dawn,
+// day and dusk, the palettes blending smoothly through the twilights, the sun
+// crossing the sky on an arc by day and the moon by night, stars fading in and
+// out. The Neon theme's day is synthwave: a pink / orange sky and a striped sun.
+// While the time is unknown it is always day.
 //
 // Controls (two buttons):
 //   Any button : wake up (the caller then shows the PIN lock if it is on, then the menu)
@@ -13,6 +19,7 @@
 // and reads messages / eats treats sent by the phone over Bluetooth.
 
 #include "tigo.h"
+#include "clock.h"
 
 namespace saver {
 
@@ -34,14 +41,22 @@ static const uint16_t BALL_R = 0xFA6D, BALL_B = 0x4D1F, BALL_Y = 0xFE87, TEAL = 
 static const uint16_t GREY = 0xB5D9, BAT_OK = 0x4ECC, BAT_MID = 0xFE60, BAT_LOW = 0xF9C6;
 static const uint16_t CABLE = 0x5ACD, STAR_C = 0xFD88, BT_BLUE = 0x3BFF, TREAT = 0xEB52, FISH = 0xFD88;
 
-struct Pal { uint16_t sky0, sky1, sea0, sea1, sand0, sand1, wet; };
-static const Pal DAY   = {0x4D1D, 0xCF5F, 0x2D37, 0x6E99, 0xF6B4, 0xE611, 0xD58F};
-static const Pal DUSK  = {0x5A53, 0xFD8F, 0x4B74, 0xDCD1, 0xEDF2, 0xD52F, 0xC4CE};
-static const Pal NIGHT = {0x0044, 0x192A, 0x0949, 0x1A4D, 0x8BED, 0x6B09, 0x62C8};
-static const Pal NEON  = {0x0802, 0x406A, 0x0845, 0x1889, 0x30A8, 0x1844, 0x20CA};
-// neon tubes and the night city
+// sky: top, middle (half way to the horizon), horizon
+struct Pal { uint16_t sky0, skyM, sky1, sea0, sea1, sand0, sand1, wet; };
+static constexpr uint16_t avg565(uint16_t a, uint16_t b) { return ((a >> 1) & 0x7BEF) + ((b >> 1) & 0x7BEF); }
+static const Pal DAY   = {0x4D1D, avg565(0x4D1D, 0xCF5F), 0xCF5F, 0x2D37, 0x6E99, 0xF6B4, 0xE611, 0xD58F};
+static const Pal DAWN  = {0x6356, 0xCCB7, 0xFE12, 0x6BD6, 0xED74, 0xF655, 0xDD92, 0xC4F1};
+static const Pal DUSK  = {0x5A53, 0xD370, 0xFD8F, 0x4B74, 0xDCD1, 0xEDF2, 0xD52F, 0xC4CE};
+static const Pal NIGHT = {0x0044, avg565(0x0044, 0x192A), 0x192A, 0x0949, 0x1A4D, 0x8BED, 0x6B09, 0x62C8};
+static const Pal NEON  = {0x0802, avg565(0x0802, 0x406A), 0x406A, 0x0845, 0x1889, 0x30A8, 0x1844, 0x20CA};
+static const Pal NEON_DAY  = {0x48B0, 0xE1F2, 0xFCEA, 0xCA52, 0x40AE, 0x694E, 0x38A9, 0x510C};   // synthwave
+static const Pal NEON_DUSK = {0x1847, 0x78CE, 0xFB09, 0x914D, 0x2067, 0x40CA, 0x2065, 0x38A8};   // dawn and dusk
+// neon tubes and the city (by night; *_D by day)
 static const uint16_t N_PINK = 0xF959, N_CYAN = 0x073F, N_YELLOW = 0xFF45, N_LIME = 0x97E7, N_RED = 0xF8C7;
 static const uint16_t BLD = 0x1023, BLD2 = 0x1845, POST = 0x3068, ARC_OFF = 0x398B, N_PANEL = 0x1825;
+static const uint16_t BLD_D = 0x38AA, BLD2_D = 0x50ED;
+static const uint16_t RSUN_TOP = 0xFF4C, RSUN_MID = 0xFC87, RSUN_BOT = 0xF1B1;   // the striped retro sun
+static const uint16_t SUN_HI = 0xFF0C, SUN_LOW = 0xFD88, MOON = 0xFF95;
 static const uint16_t WIN[3] = {0x93C5, 0x1C12, 0x914F};
 
 // ---------------- state ----------------
@@ -68,9 +83,21 @@ static int mv = 4000, pct = 100;
 static bool usb = false, usbWas = false;
 static uint32_t battAt = 0;
 static const Pal *pal = &DAY;
+static Pal curPal;                        // this frame's blend
 static bool night = false, haveTime = false;
-static bool neon = false;                 // Neon theme: night city scene, neon signs
+static bool neon = false;                 // Neon theme: neon city, neon signs
 static struct tm tmNow;
+
+// the sun: the phase and its twilight windows (minutes around sunrise / sunset)
+enum SunPhase { SUN_NIGHT, SUN_DAWN, SUN_DAY, SUN_DUSK };
+static const int DAWN_PRE = 45, DAWN_POST = 30, DUSK_PRE = 45, DUSK_POST = 40;
+static SunPhase sunPh = SUN_DAY;
+static float dark = 0;                    // 0 day .. 1 night
+static float warm = 0;                    // 1 = the sun on the horizon: the warm twilight palette
+static float sunP = 0.5f, moonP = -1;     // along their arcs: 0 rising .. 1 setting
+static float sunX, sunY, sunR, moonX, moonY, moonA, starA, glow;
+static uint16_t sunC = SUN_HI;
+static bool sunUp = false, moonUp = false;
 
 static int pendingTreats = 0;
 static bool treatRun = false;
@@ -102,6 +129,72 @@ static void say(uint32_t now, uint32_t len, const char *fmt, ...) {
   dbg("tigo says: %s\n", btxt);
 }
 
+static float clamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+static uint16_t mix565(uint16_t a, uint16_t b, float f) {   // a (f = 0) .. b (f = 1)
+  if (f <= 0) return a;
+  if (f >= 1) return b;
+  return tft.alphaBlend((uint8_t)(f * 255 + 0.5f), b, a);
+}
+static uint16_t byNight(uint16_t dayC, uint16_t nightC) { return mix565(dayC, nightC, dark); }
+
+static Pal mixPal(const Pal &a, const Pal &b, float f) {
+  return {mix565(a.sky0, b.sky0, f), mix565(a.skyM, b.skyM, f), mix565(a.sky1, b.sky1, f),
+          mix565(a.sea0, b.sea0, f), mix565(a.sea1, b.sea1, f), mix565(a.sand0, b.sand0, f),
+          mix565(a.sand1, b.sand1, f), mix565(a.wet, b.wet, f)};
+}
+
+// the sky's colour at row y (the gradient drawn by fillSky)
+static uint16_t skyAt(float y) {
+  const int mid = HORIZON / 2;
+  if (y < mid) return mix565(pal->sky0, pal->skyM, y / mid);
+  return mix565(pal->skyM, pal->sky1, (y - mid) / (HORIZON - mid));
+}
+
+static void fillSky() {
+  const int mid = HORIZON / 2;
+  spr.fillRectVGradient(0, 0, SCR_W, mid, pal->sky0, pal->skyM);
+  spr.fillRectVGradient(0, mid, SCR_W, HORIZON - mid, pal->skyM, pal->sky1);
+}
+
+// a point on the sky's arc, for a disc of radius r: p = 0 just risen on the left,
+// 1 setting on the right, the top of the arc at peakY (it climbs quickly off the
+// horizon, then slowly); outside 0..1 it sinks below
+static void arcPos(float p, float r, float peakY, float *x, float *y) {
+  float q = clamp01(p), base = HORIZON + r, x0 = neon ? 20 : 8;
+  *x = x0 + q * (SCR_W - 2 * x0);
+  *y = base - sqrtf(sinf(q * (float)M_PI)) * (base - peakY) + (p < 0 ? -p : p > 1 ? p - 1 : 0) * 400;
+}
+
+// The phase of the day from today's sunrise and sunset, how dark and how warm the
+// sky is, and where the sun and the moon are on their way.
+static void readSun() {
+  sunPh = SUN_DAY; dark = 0; warm = 0; sunP = 0.5f; moonP = -1;
+  int rise, set;
+  if (!haveTime || !clockSun(&rise, &set)) return;        // unknown time: a plain day, never night
+  if (set - rise >= 1440) return;                          // the sun never sets
+  if (set <= rise) { sunPh = SUN_NIGHT; dark = 1; sunP = -1; moonP = 0.5f; return; }   // nor rises
+  float m = tmNow.tm_hour * 60 + tmNow.tm_min + tmNow.tm_sec / 60.0f;
+  sunP = (m - rise) / (set - rise);
+  moonP = (m >= set ? m - set : m + 1440 - set) / (1440 - (set - rise));   // night: sunset .. sunrise
+  // u: 0 = the night end of the twilight .. 1 = its day end; f0 = the sun on the horizon
+  float u, f0;
+  if (m >= rise - DAWN_PRE && m < rise + DAWN_POST) {
+    sunPh = SUN_DAWN;
+    u = (m - (rise - DAWN_PRE)) / (DAWN_PRE + DAWN_POST);
+    f0 = (float)DAWN_PRE / (DAWN_PRE + DAWN_POST);
+  } else if (m >= set - DUSK_PRE && m < set + DUSK_POST) {
+    sunPh = SUN_DUSK;
+    u = (set + DUSK_POST - m) / (DUSK_PRE + DUSK_POST);
+    f0 = (float)DUSK_POST / (DUSK_PRE + DUSK_POST);
+  } else {
+    if (m < rise || m >= set) { sunPh = SUN_NIGHT; dark = 1; }
+    return;
+  }
+  if (u < f0) { warm = u / f0; dark = 1 - 0.5f * warm; }
+  else { warm = (1 - u) / (1 - f0); dark = 0.5f * warm; }
+}
+
 static void readEnv(uint32_t now) {
   if (!battAt || (int32_t)(now - battAt) >= (int32_t)BATT_READ_MS) {
     battAt = now;
@@ -110,10 +203,26 @@ static void readEnv(uint32_t now) {
     usb = onUsbPower(mv);
   }
   haveTime = timeIsSet() && localTimeNow(&tmNow);
-  int h = haveTime ? tmNow.tm_hour : 12;
-  night = haveTime && (h >= 21 || h < 6);
   neon = theme().neon;
-  pal = neon ? &NEON : !haveTime ? &DAY : night ? &NIGHT : (h == 6 || h == 19 || h == 20) ? &DUSK : &DAY;
+  readSun();
+  night = sunPh == SUN_NIGHT;
+  // the palette: day .. night by the darkness, then the twilight's warm colours on top
+  const Pal &dayP = neon ? NEON_DAY : DAY, &nightP = neon ? NEON : NIGHT;
+  const Pal &warmP = neon ? NEON_DUSK : sunPh == SUN_DAWN ? DAWN : DUSK;
+  curPal = mixPal(mixPal(dayP, nightP, dark), warmP, warm);
+  pal = &curPal;
+  // the sky's lights
+  starA = clamp01((dark - 0.5f) * 2);                      // gone by sunrise, out after sunset
+  moonA = clamp01((dark - 0.3f) / 0.5f);
+  glow = 0.4f + 0.6f * dark;                               // neon signs glow softer by day
+  float low = 1 - clamp01(sinf(clamp01(sunP) * (float)M_PI) * 2.5f);   // 1 near the horizon
+  sunC = mix565(SUN_HI, SUN_LOW, low);
+  sunR = neon ? 16 : 8.5f + 1.5f * low;
+  arcPos(sunP, sunR, neon ? 76 : 84, &sunX, &sunY);
+  sunUp = sunY - sunR < HORIZON;
+  float mr = neon ? 6.5f : 9;
+  arcPos(moonP, mr, neon ? 70 : 80, &moonX, &moonY);
+  moonUp = moonA > 0 && moonY - mr < HORIZON;
 }
 
 // ---------------- talking ----------------
@@ -160,15 +269,22 @@ static void sayContext(uint32_t now) {
         }
         if (wifiEnabled()) { say(now, 0, "No WiFi... anyone out there?"); return; }
         say(now, 0, "WiFi off. Digital detox!"); return;
-      case 2:   // time of day
+      case 2: {  // time of day, by the sun
         if (!haveTime) break;
-        if (tmNow.tm_hour >= 22 || tmNow.tm_hour < 5) {
-          say(now, 0, irand(2) ? "It's %d:%02d. Bed time?" : "Why are we up so late?", tmNow.tm_hour, tmNow.tm_min);
-        } else if (tmNow.tm_hour < 11) say(now, 0, irand(2) ? "Good morning!" : "Breakfast time?");
-        else if (tmNow.tm_hour < 14) say(now, 0, "Lunch o'clock!");
-        else if (tmNow.tm_hour < 18) say(now, 0, "Afternoon beach time.");
-        else say(now, 0, "Pretty sunset, huh?");
+        int h = tmNow.tm_hour;
+        if (sunPh == SUN_NIGHT) {
+          if (h >= 22 || h < 5)
+            say(now, 0, irand(2) ? "It's %d:%02d. Bed time?" : "Why are we up so late?", h, tmNow.tm_min);
+          else if (h < 12) say(now, 0, irand(2) ? "Still dark... five more minutes?" : "Is the sun up yet?");
+          else say(now, 0, irand(2) ? "Dark already? Cozy." : "Look, the stars are out!");
+        } else if (sunPh == SUN_DAWN) say(now, 0, irand(2) ? "Sunrise! Good morning!" : "Here comes the sun!");
+        else if (sunPh == SUN_DUSK) say(now, 0, irand(2) ? "Pretty sunset, huh?" : "The sun is going to bed.");
+        else if (h < 11) say(now, 0, irand(2) ? "Good morning!" : "Breakfast time?");
+        else if (h < 14) say(now, 0, "Lunch o'clock!");
+        else if (h < 18) say(now, 0, "Afternoon beach time.");
+        else say(now, 0, "Long evening, still sunny!");
         return;
+      }
       case 3: {  // high scores
         int g = numGames();
         for (int k = 0; k < 6 && g > 0; k++) {
@@ -642,12 +758,64 @@ static void stepProps(float dt) {
   if (mound > 0) mound = max(0.0f, mound - dt / 4.0f);
 }
 
-// ---------------- rendering: neon night scene (Neon theme) ----------------
-// a neon tube along a line: faint halo, glow, bright core
+// ---------------- rendering: the sky's lights ----------------
+static void drawStars(int n, int seed, int yMax, uint8_t a0, uint8_t aT, bool neonTint, uint32_t t) {
+  for (int i = 0; i < n; i++) {
+    uint32_t h = hash32(i + seed);
+    int x = h % SCR_W, y = (h >> 8) % yMax;
+    uint8_t a = (uint8_t)((a0 + aT * triWave(t + (h >> 16) % 3000, 2600 + (h >> 20) % 1500)) * starA);
+    uint16_t c = neonTint && !((h >> 4) % 3) ? (h & 2 ? N_CYAN : N_PINK) : WHITE;
+    c = tft.alphaBlend(a, c, skyAt(y));
+    if (neonTint || (h & 1)) spr.drawPixel(x, y, c);
+    else spr.drawSpot(x, y, 0.8f, c);
+  }
+}
+
+// a light's glittering path on the water, under x (strength a)
+static void reflect(float x0, uint16_t c, float a0, float wide, int seed, uint32_t t) {
+  for (int y = HORIZON + 3; y < SHORE - 1; y += 3) {
+    float depth = (float)(y - HORIZON) / (SHORE - HORIZON);
+    float x = x0 + sinf(t * 0.003f + y * 0.7f + seed) * (1.5f + depth * 2);
+    int len = (int)((3 + (1 - depth) * 4) * wide);
+    uint8_t a = (uint8_t)(170 * a0 * (1 - depth * 0.7f) * (0.6f + 0.4f * triWave(t + y * 40 + seed * 300, 1800)));
+    spr.drawFastHLine((int)(x - len / 2), y, len, tft.alphaBlend(a, c, mix565(pal->sea0, pal->sea1, depth)));
+  }
+}
+
+// ---------------- rendering: neon scene (Neon theme) ----------------
+// a neon tube along a line: faint halo, glow (softer by day), bright core
 static void tube(float ax, float ay, float bx, float by, float w, uint16_t c, uint16_t bg) {
-  spr.drawWideLine(ax, ay, bx, by, w + 3.2f, tft.alphaBlend(55, c, bg));
-  spr.drawWideLine(ax, ay, bx, by, w + 1.4f, tft.alphaBlend(130, c, bg));
+  spr.drawWideLine(ax, ay, bx, by, w + 3.2f, tft.alphaBlend((uint8_t)(55 * glow), c, bg));
+  spr.drawWideLine(ax, ay, bx, by, w + 1.4f, tft.alphaBlend((uint8_t)(60 + 70 * glow), c, bg));
   spr.drawWideLine(ax, ay, bx, by, w, c);
+}
+
+// the synthwave sun: a big disc, yellow at the top to hot pink at the bottom, cut by
+// stripes of sky that widen towards its bottom; it sets behind the skyline
+static void drawRetroSun(float cx, float cy, float r) {
+  uint16_t bg = skyAt(min(cy, HORIZON - 1.0f));
+  spr.drawSpot(cx, cy, r + 7, tft.alphaBlend(40, RSUN_MID, bg));
+  spr.drawSpot(cx, cy, r + 3.5f, tft.alphaBlend(80, RSUN_MID, bg));
+  for (int y = max(0, (int)ceilf(cy - r)); y <= (int)floorf(cy + r) && y < HORIZON; y++) {
+    float dy = y - cy, hw = sqrtf(max(0.0f, r * r - dy * dy));
+    float v = (dy + r) / (2 * r);
+    uint16_t c = v < 0.5f ? mix565(RSUN_TOP, RSUN_MID, v * 2) : mix565(RSUN_MID, RSUN_BOT, v * 2 - 1);
+    uint16_t sky = skyAt(y), under = tft.alphaBlend(80, RSUN_MID, sky);   // the inner halo there
+    bool gap = false;
+    for (int k = 0; k < 5 && !gap; k++) {
+      float gy = cy + r * (-0.32f + 0.2f * k), gh = 1 + 0.6f * k;
+      gap = y >= gy && y < gy + gh;
+    }
+    if (gap) {   // the stripe cuts through the disc and its inner halo
+      float hh = sqrtf(max(0.0f, (r + 3.5f) * (r + 3.5f) - dy * dy));
+      spr.drawFastHLine((int)ceilf(cx - hh), y, (int)floorf(cx + hh) - (int)ceilf(cx - hh) + 1, sky);
+      continue;
+    }
+    int xl = (int)ceilf(cx - hw), xr = (int)floorf(cx + hw);
+    if (xr >= xl) spr.drawFastHLine(xl, y, xr - xl + 1, c);
+    spr.drawPixel(xl - 1, y, mix565(under, c, xl - (cx - hw)));   // soft edges
+    spr.drawPixel(xr + 1, y, mix565(under, c, (cx + hw) - xr));
+  }
 }
 
 // on/off flicker of a neon sign: mostly on, two quick drop-outs every few seconds
@@ -661,58 +829,59 @@ static const uint8_t BLD_H[] = {22, 34, 18, 40, 26, 31, 44, 24, 33};      // hei
 static const int NUM_BLD = sizeof BLD_X;
 
 static void drawSkyNeon(uint32_t t) {
-  spr.fillRectVGradient(0, 0, SCR_W, HORIZON, pal->sky0, pal->sky1);
-  for (int i = 0; i < 20; i++) {             // a few stars over the city glow
-    uint32_t h = hash32(i + 11);
-    int x = h % SCR_W, y = (h >> 8) % (HORIZON - 40);
-    uint8_t a = 60 + (uint8_t)(150 * triWave(t + (h >> 16) % 3000, 2600 + (h >> 20) % 1500));
-    uint16_t c = tft.alphaBlend(a, (h >> 4) % 3 ? WHITE : (h & 2 ? N_CYAN : N_PINK), pal->sky0);
-    spr.drawPixel(x, y, c);
+  fillSky();
+  if (starA > 0) drawStars(20, 11, HORIZON - 40, 60, 150, true, t);   // a few stars over the city glow
+  if (moonUp) {   // moon with a soft glow and a bite
+    uint16_t mbg = skyAt(moonY);
+    spr.drawSpot(moonX, moonY, 11, tft.alphaBlend((uint8_t)(40 * moonA), N_PINK, mbg));
+    spr.drawSpot(moonX, moonY, 8.5f, tft.alphaBlend((uint8_t)(90 * moonA), N_PINK, mbg));
+    spr.drawSpot(moonX, moonY, 6.5f, mix565(mbg, MOON, moonA));
+    spr.drawSpot(moonX + 4, moonY - 3, 5.5f, tft.alphaBlend((uint8_t)(60 * moonA), N_PINK, skyAt(moonY - 3)));
   }
-  // moon with a soft glow and a bite
-  uint16_t mbg = tft.alphaBlend(150, pal->sky0, pal->sky1);
-  spr.drawSpot(116, 70, 11, tft.alphaBlend(40, N_PINK, mbg));
-  spr.drawSpot(116, 70, 8.5f, tft.alphaBlend(90, N_PINK, mbg));
-  spr.drawSpot(116, 70, 6.5f, 0xFF95);
-  spr.drawSpot(120, 67, 5.5f, tft.alphaBlend(60, N_PINK, mbg));
-  // skyline: dark blocks with lit windows, some flickering
+  if (sunUp) drawRetroSun(sunX, sunY, sunR);
+  // skyline: dark blocks (purple silhouettes by day) with lit windows, some flickering;
+  // by day most of the lights are off
+  uint16_t bld = byNight(BLD_D, BLD), bld2 = byNight(BLD2_D, BLD2);
+  uint16_t rim = byNight(RSUN_MID, N_CYAN);
+  uint8_t rimA = (uint8_t)(90 + 90 * (1 - dark));
+  uint32_t litMax = (uint32_t)(256 * (0.12f + 0.88f * dark));
   for (int b = 0; b < NUM_BLD; b++) {
     int x0 = BLD_X[b], x1 = b + 1 < NUM_BLD ? BLD_X[b + 1] : SCR_W, top = HORIZON - BLD_H[b];
-    spr.fillRect(x0, top, x1 - x0, HORIZON - top, b & 1 ? BLD : BLD2);
-    spr.drawFastHLine(x0, top, x1 - x0, tft.alphaBlend(90, N_CYAN, BLD));   // rooftop rim light
+    spr.fillRect(x0, top, x1 - x0, HORIZON - top, b & 1 ? bld : bld2);
+    spr.drawFastHLine(x0, top, x1 - x0, tft.alphaBlend(rimA, rim, bld));   // rooftop rim light (sunlit by day)
     for (int y = top + 4; y < HORIZON - 3; y += 5)
       for (int x = x0 + 2; x < x1 - 2; x += 4) {
         uint32_t h = hash32(b * 97 + y * 13 + x);
-        bool lit = (h & 7) < 3;
+        bool lit = (h & 7) < 3 && ((h >> 9) & 255) < litMax;
         if ((h & 63) == 5) lit = (t / (1500 + (h >> 8) % 2000)) % 2;   // someone flicks the light
         if (lit) spr.fillRect(x, y, 2, 2, WIN[(h >> 4) % 3]);
       }
   }
   // antenna with a blinking red light on the tallest tower
-  spr.drawFastVLine(97, HORIZON - 44 - 9, 9, BLD2);
+  spr.drawFastVLine(97, HORIZON - 44 - 9, 9, bld2);
   if ((t / 700) % 2) spr.drawSpot(97, HORIZON - 54, 1.4f, N_RED);
   // graffiti tags on the low walls
-  uint16_t tagBg = BLD2;
+  uint16_t tagBg = bld2;
   spr.drawWideLine(31, 112, 34, 108, 1.0f, tft.alphaBlend(200, N_LIME, tagBg));
   spr.drawWideLine(34, 108, 36, 112, 1.0f, tft.alphaBlend(200, N_LIME, tagBg));
   spr.drawWideLine(36, 112, 39, 108, 1.0f, tft.alphaBlend(200, N_LIME, tagBg));
-  spr.drawWideLine(107, 114, 111, 110, 1.0f, tft.alphaBlend(200, N_PINK, BLD));
-  spr.drawWideLine(111, 110, 115, 114, 1.0f, tft.alphaBlend(200, N_CYAN, BLD));
+  spr.drawWideLine(107, 114, 111, 110, 1.0f, tft.alphaBlend(200, N_PINK, bld));
+  spr.drawWideLine(111, 110, 115, 114, 1.0f, tft.alphaBlend(200, N_CYAN, bld));
   // signs: a pink "OPEN" box and a cyan wave
   bool on = flickerOn(t, 7300, 0);
-  uint16_t sc = on ? N_PINK : tft.alphaBlend(90, N_PINK, BLD);
-  if (on) spr.fillSmoothRoundRect(90, 84, 34, 15, 4, tft.alphaBlend(60, N_PINK, BLD));
+  uint16_t sc = on ? N_PINK : tft.alphaBlend(90, N_PINK, bld);
+  if (on) spr.fillSmoothRoundRect(90, 84, 34, 15, 4, tft.alphaBlend((uint8_t)(60 * glow), N_PINK, bld));
   spr.fillSmoothRoundRect(92, 86, 30, 11, 3, sc);
   spr.fillSmoothRoundRect(93, 87, 28, 9, 2, N_PANEL);
   spr.setTextDatum(MC_DATUM);
   spr.setTextColor(on ? tft.alphaBlend(120, WHITE, N_PINK) : sc);
   spr.drawString("OPEN", 107, 92, 1);
   bool on2 = flickerOn(t, 5100, 2300);
-  uint16_t wc = on2 ? N_CYAN : tft.alphaBlend(90, N_CYAN, BLD);
+  uint16_t wc = on2 ? N_CYAN : tft.alphaBlend(90, N_CYAN, bld);
   for (int i = 0; i < 4; i++) {
     float x = 44 + i * 3.0f;
     float y0 = 86 + (i & 1 ? 2.5f : 0), y1 = 86 + (i & 1 ? 0 : 2.5f);
-    if (on2) spr.drawWideLine(x, y0, x + 3, y1, 3.6f, tft.alphaBlend(60, N_CYAN, BLD2));
+    if (on2) spr.drawWideLine(x, y0, x + 3, y1, 3.6f, tft.alphaBlend((uint8_t)(60 * glow), N_CYAN, bld2));
     spr.drawWideLine(x, y0, x + 3, y1, 1.3f, wc);
   }
   // a neon palm on the far shore
@@ -724,19 +893,16 @@ static void drawSkyNeon(uint32_t t) {
 
 static void drawSeaNeon(uint32_t t) {
   spr.fillRectVGradient(0, HORIZON, SCR_W, SHORE - HORIZON + 6, pal->sea0, pal->sea1);
-  spr.drawFastHLine(0, HORIZON, SCR_W, tft.alphaBlend(120, N_PINK, pal->sea0));
-  // the signs, the palm and the moon reflected as wobbling dashes
-  const uint8_t rx[5] = {107, 49, 13, 116, 70};
-  const uint16_t rc[5] = {N_PINK, N_CYAN, N_LIME, 0xFF95, WIN[0]};
-  for (int i = 0; i < 5; i++) {
-    for (int y = HORIZON + 3; y < SHORE - 1; y += 3) {
-      float depth = (float)(y - HORIZON) / (SHORE - HORIZON);
-      float x = rx[i] + sinf(t * 0.003f + y * 0.7f + i) * (1.5f + depth * 2);
-      int len = 3 + (int)((1 - depth) * 4) + (i == 0 ? 3 : 0);
-      uint8_t a = (uint8_t)(170 * (1 - depth * 0.7f) * (0.6f + 0.4f * triWave(t + y * 40 + i * 300, 1800)));
-      spr.drawFastHLine((int)(x - len / 2), y, len, tft.alphaBlend(a, rc[i], pal->sea1));
-    }
+  spr.drawFastHLine(0, HORIZON, SCR_W, tft.alphaBlend(120, byNight(RSUN_TOP, N_PINK), pal->sea0));
+  // the sun, the moon, the signs and the palm reflected as wobbling dashes
+  if (sunUp) {
+    reflect(sunX, RSUN_TOP, 1.0f, 2.4f, 7, t);
+    reflect(sunX + 1, RSUN_BOT, 0.6f, 1.2f, 3, t);
   }
+  if (moonUp) reflect(moonX, MOON, moonA, 1.0f, 3, t);
+  const uint8_t rx[4] = {107, 49, 13, 70};
+  const uint16_t rc[4] = {N_PINK, N_CYAN, N_LIME, WIN[0]};
+  for (int i = 0; i < 4; i++) reflect(rx[i], rc[i], i == 3 ? dark : glow, i == 0 ? 1.6f : 1.0f, i, t);
 }
 
 static void drawNeonStar(float sx, float sy, float r, uint16_t c, uint16_t bg) {
@@ -891,7 +1057,7 @@ static void drawClock(uint32_t now) {
   int h = tmNow.tm_hour, m = tmNow.tm_min;
   int dg[4] = {h / 10, h % 10, m / 10, m % 10};
   float xs[4] = {17, 40, 74, 97};
-  uint16_t c = night ? 0xFF95 : WHITE, sh = night ? 0x0000 : 0x2A6E;
+  uint16_t c = byNight(WHITE, 0xFF95), sh = byNight(0x2A6E, 0x0000);
   if (!neon) {
     for (int pass = 0; pass < 2; pass++)
       for (int i = 0; i < 4; i++) drawDigit(xs[i] + (pass ? 0 : 1.5f), pass ? 10 : 11.5f, dg[i], pass ? c : sh);
@@ -910,36 +1076,33 @@ static void drawClock(uint32_t now) {
     spr.drawString(buf, 67, 48, 2);
     return;
   }
-  spr.setTextColor(night ? 0xCE9C : 0x2A6E);
+  spr.setTextColor(byNight(0x2A6E, 0xCE9C));
   spr.drawString(buf, 68, 49, 2);
-  spr.setTextColor(night ? 0xCE9C : WHITE);
+  spr.setTextColor(byNight(WHITE, 0xCE9C));
   spr.drawString(buf, 67, 48, 2);
 }
 
 static void drawSky(uint32_t t) {
   if (neon) { drawSkyNeon(t); return; }
-  spr.fillRectVGradient(0, 0, SCR_W, HORIZON, pal->sky0, pal->sky1);
-  if (night) {
-    for (int i = 0; i < 26; i++) {           // twinkling stars
-      uint32_t h = hash32(i + 11);
-      int x = h % SCR_W, y = (h >> 8) % (HORIZON - 8);
-      uint8_t a = 90 + (uint8_t)(165 * triWave(t + (h >> 16) % 3000, 2600 + (h >> 20) % 1500));
-      uint16_t c = tft.alphaBlend(a, WHITE, pal->sky0);
-      if (h & 1) spr.drawPixel(x, y, c);
-      else spr.drawSpot(x, y, 0.8f, c);
-    }
-    spr.drawSpot(114, 84, 9, 0xFF95);        // moon, with a bite
-    spr.drawSpot(119, 80, 8, tft.alphaBlend(128, pal->sky0, pal->sky1));
-  } else {
-    uint16_t sun = pal == &DUSK ? 0xFD88 : 0xFF0C;
-    float sy = pal == &DUSK ? 104 : 84;
-    spr.drawSpot(114, sy, 14, tft.alphaBlend(60, sun, pal->sky1));
-    spr.drawSpot(114, sy, 11, tft.alphaBlend(120, sun, pal->sky1));
-    spr.drawSpot(114, sy, 8.5f, sun);
+  fillSky();
+  if (starA > 0) drawStars(26, 11, HORIZON - 8, 90, 165, false, t);   // twinkling stars
+  if (moonUp) {                              // moon, with a bite
+    spr.drawSpot(moonX, moonY, 9, mix565(skyAt(moonY), MOON, moonA));
+    spr.drawSpot(moonX + 5, moonY - 4, 8, skyAt(moonY - 4));
+  }
+  if (sunUp) {
+    uint16_t bg = skyAt(min(sunY, HORIZON - 1.0f));
+    spr.drawSpot(sunX, sunY, sunR + 5.5f, tft.alphaBlend(60, sunC, bg));
+    spr.drawSpot(sunX, sunY, sunR + 2.5f, tft.alphaBlend(120, sunC, bg));
+    spr.drawSpot(sunX, sunY, sunR, sunC);
+  }
+  float cloudA = 1 - clamp01((dark - 0.35f) / 0.5f);   // the clouds fade into the night
+  if (cloudA > 0) {
+    uint16_t cc = mix565(WHITE, 0xFE96, warm);          // lit pink / peach by a low sun
     for (int i = 0; i < 2; i++) {            // clouds drifting by
       float x = fmodf(t / 1000.0f * (3 + i * 2) + i * 80, SCR_W + 60) - 30;
       float y = 74 + i * 16;
-      uint16_t c = pal == &DUSK ? 0xFE96 : WHITE;
+      uint16_t c = mix565(skyAt(y), cc, cloudA);
       spr.drawSpot(x, y, 6, c); spr.drawSpot(x + 8, y - 3, 7.5f, c); spr.drawSpot(x + 17, y, 6, c);
       spr.fillRect((int)x, (int)y, 18, 6, c);
     }
@@ -957,6 +1120,8 @@ static void drawSea(uint32_t t) {
     uint8_t a = (uint8_t)(200 * triWave(t + h % 2000, 2400));
     spr.drawFastHLine((int)x, y, 3 + (h >> 12) % 4, tft.alphaBlend(a, WHITE, pal->sea1));
   }
+  if (sunUp) reflect(sunX, sunC, 0.35f + 0.55f * warm, 1.3f, 5, t);   // the sun's path on the water
+  else if (moonUp) reflect(moonX, MOON, 0.6f * moonA, 1.0f, 5, t);
 }
 
 static void drawSand(uint32_t t) {
@@ -986,17 +1151,17 @@ static void drawSand(uint32_t t) {
   }
   for (int i = 0; i < 5; i++) {
     float a = -1.5708f + i * 1.2566f + 0.2f;
-    spr.drawWedgeLine(sx, sy, sx + cosf(a) * 6.3f, sy + sinf(a) * 6.3f, 2.0f, 0.5f, night ? 0xA2E7 : STAR_C);
+    spr.drawWedgeLine(sx, sy, sx + cosf(a) * 6.3f, sy + sinf(a) * 6.3f, 2.0f, 0.5f, byNight(STAR_C, 0xA2E7));
   }
-  spr.drawSpot(sx, sy, 0.8f, night ? 0xB4AA : 0xFEEC);
+  spr.drawSpot(sx, sy, 0.8f, byNight(0xFEEC, 0xB4AA));
   spr.drawSpot(26, 231, 3.2f, PLUM);
-  spr.drawSpot(26, 231, 2.4f, night ? 0x6B4D : 0xB5D9);
+  spr.drawSpot(26, 231, 2.4f, byNight(0xB5D9, 0x6B4D));
   // the bucket near the water
   float bx = 14, by = 166;
   spr.fillTriangle(bx - 7, by - 6, bx + 7, by - 6, bx, by + 2, PLUM);
   spr.drawWedgeLine(bx, by - 6, bx, by + 4, 7.5f, 5.8f, PLUM);
-  spr.drawWedgeLine(bx, by - 6, bx, by + 4, 6.5f, 4.8f, night ? 0x1B2B : TEAL);
-  spr.drawWideLine(bx - 6, by - 6, bx + 6, by - 6, 2.0f, night ? 0x3CD2 : 0x7F1A);
+  spr.drawWedgeLine(bx, by - 6, bx, by + 4, 6.5f, 4.8f, byNight(TEAL, 0x1B2B));
+  spr.drawWideLine(bx - 6, by - 6, bx + 6, by - 6, 2.0f, byNight(0x7F1A, 0x3CD2));
   spr.drawWideLine(bx - 5, by - 8, bx - 1, by - 13, 1.0f, PLUM);
   spr.drawWideLine(bx - 1, by - 13, bx + 5, by - 8, 1.0f, PLUM);
 }
@@ -1029,7 +1194,7 @@ static void drawBattery(uint32_t t) {
   char buf[8];
   snprintf(buf, sizeof buf, usb ? "USB" : "%d%%", pct);
   spr.setTextDatum(BC_DATUM);
-  spr.setTextColor(night ? 0xCE9C : PLUM);
+  spr.setTextColor(mix565(PLUM, 0xCE9C, (dark - 0.8f) * 5));   // dark text until the sand is dark too
   spr.drawString(buf, ix + BATT_W / 2, iy - 2, 1);
 }
 

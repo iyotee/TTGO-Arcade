@@ -14,24 +14,26 @@
 
 namespace timesvc {
 
-struct Zone { const char *city, *label, *tz; };
+// lat / lon (degrees, north / east positive) of the city the zone stands for: the
+// screensaver's sun follows it (India: Delhi, UTC: Greenwich)
+struct Zone { const char *city, *label, *tz; float lat, lon; };
 static const Zone ZONES[CLOCK_NUM_ZONES] = {
-  {"Zurich",   "Europe/Zurich",       "CET-1CEST,M3.5.0,M10.5.0/3"},
-  {"London",   "Europe/London",       "GMT0BST,M3.5.0/1,M10.5.0"},
-  {"Lisbon",   "Europe/Lisbon",       "WET0WEST,M3.5.0/1,M10.5.0"},
-  {"Athens",   "Helsinki / Athens",   "EET-2EEST,M3.5.0/3,M10.5.0/4"},
-  {"Moscow",   "Europe/Moscow",       "MSK-3"},
-  {"Dubai",    "Asia/Dubai",          "GST-4"},
-  {"India",    "India (Kolkata)",     "IST-5:30"},
-  {"Bangkok",  "Asia/Bangkok",        "ICT-7"},
-  {"Shanghai", "Shanghai / Singapore", "CST-8"},
-  {"Tokyo",    "Asia/Tokyo",          "JST-9"},
-  {"Sydney",   "Australia/Sydney",    "AEST-10AEDT,M10.1.0,M4.1.0/3"},
-  {"New York", "America/New_York",    "EST5EDT,M3.2.0,M11.1.0"},
-  {"Chicago",  "America/Chicago",     "CST6CDT,M3.2.0,M11.1.0"},
-  {"Denver",   "America/Denver",      "MST7MDT,M3.2.0,M11.1.0"},
-  {"L.A.",     "America/Los_Angeles", "PST8PDT,M3.2.0,M11.1.0"},
-  {"UTC",      "UTC",                 "UTC0"},
+  {"Zurich",   "Europe/Zurich",       "CET-1CEST,M3.5.0,M10.5.0/3",    47.37f,    8.54f},
+  {"London",   "Europe/London",       "GMT0BST,M3.5.0/1,M10.5.0",      51.51f,   -0.13f},
+  {"Lisbon",   "Europe/Lisbon",       "WET0WEST,M3.5.0/1,M10.5.0",     38.72f,   -9.14f},
+  {"Athens",   "Helsinki / Athens",   "EET-2EEST,M3.5.0/3,M10.5.0/4",  37.98f,   23.73f},
+  {"Moscow",   "Europe/Moscow",       "MSK-3",                         55.76f,   37.62f},
+  {"Dubai",    "Asia/Dubai",          "GST-4",                         25.20f,   55.27f},
+  {"India",    "India (Kolkata)",     "IST-5:30",                      28.61f,   77.21f},
+  {"Bangkok",  "Asia/Bangkok",        "ICT-7",                         13.76f,  100.50f},
+  {"Shanghai", "Shanghai / Singapore", "CST-8",                        31.23f,  121.47f},
+  {"Tokyo",    "Asia/Tokyo",          "JST-9",                         35.68f,  139.69f},
+  {"Sydney",   "Australia/Sydney",    "AEST-10AEDT,M10.1.0,M4.1.0/3", -33.87f,  151.21f},
+  {"New York", "America/New_York",    "EST5EDT,M3.2.0,M11.1.0",        40.71f,  -74.01f},
+  {"Chicago",  "America/Chicago",     "CST6CDT,M3.2.0,M11.1.0",        41.88f,  -87.63f},
+  {"Denver",   "America/Denver",      "MST7MDT,M3.2.0,M11.1.0",        39.74f, -104.99f},
+  {"L.A.",     "America/Los_Angeles", "PST8PDT,M3.2.0,M11.1.0",        34.05f, -118.24f},
+  {"UTC",      "UTC",                 "UTC0",                          51.48f,    0.00f},
 };
 
 static const time_t RESYNC_S = 6L * 3600;      // SNTP polls hourly by itself; this catches long outages
@@ -76,6 +78,23 @@ static void startSntp(uint32_t now) {
   sntpStarted = true;
   startedAt = now;
   dbg("time: SNTP started (%s)\n", ZONES[zone].city);
+}
+
+// Sunrise or sunset in UTC minutes after midnight (NOAA "General Solar Position
+// Calculations", zenith 90.833 deg = refraction + the sun's radius), the sun's
+// position taken at `at` (UTC minutes, the caller iterates). yday is 0-based.
+// *polar: 0 normal, 1 the sun stays up all day, -1 it stays down.
+static double sunEventUtc(int yday, int ylen, double lat, double lon, bool rise, double at, int *polar) {
+  const double D2R = M_PI / 180;
+  double g = 2 * M_PI / ylen * (yday + (at / 60 - 12) / 24);   // fractional year, radians
+  double eqt = 229.18 * (0.000075 + 0.001868 * cos(g) - 0.032077 * sin(g) - 0.014615 * cos(2 * g) -
+                         0.040849 * sin(2 * g));               // equation of time, minutes
+  double decl = 0.006918 - 0.399912 * cos(g) + 0.070257 * sin(g) - 0.006758 * cos(2 * g) +
+                0.000907 * sin(2 * g) - 0.002697 * cos(3 * g) + 0.00148 * sin(3 * g);
+  double c = cos(90.833 * D2R) / (cos(lat * D2R) * cos(decl)) - tan(lat * D2R) * tan(decl);
+  *polar = c > 1 ? -1 : c < -1 ? 1 : 0;
+  double ha = acos(c > 1 ? 1 : c < -1 ? -1 : c) / D2R;        // hour angle, degrees
+  return 720 - 4 * (lon + (rise ? ha : -ha)) - eqt;
 }
 
 static bool needsSync() {
@@ -168,6 +187,38 @@ bool clockSyncing() {
   if (wifiHeldBy(timesvc::HOLDER) && timesvc::needsSync()) return true;   // WiFi coming up for it
 #endif
   return timesvc::sntpStarted && wifiConnected() && timesvc::needsSync();
+}
+
+bool clockSun(int *riseMin, int *setMin) {
+  using namespace timesvc;
+  struct tm lt;
+  if (!localTimeNow(&lt)) return false;
+  int off = clockUtcOffsetMin();
+  // once per day (and again if the zone or its offset changes: a DST switch)
+  static int cDay = -1, cZone = -1, cOff = 0, cRise = 360, cSet = 1080;
+  int day = lt.tm_year * 366 + lt.tm_yday;
+  if (day != cDay || zone != cZone || off != cOff) {
+    cDay = day; cZone = zone; cOff = off;
+    int y = lt.tm_year + 1900, ylen = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 366 : 365;
+    double lat = ZONES[zone].lat, lon = ZONES[zone].lon;
+    double ev[2];
+    int pol = 0;
+    for (int k = 0; k < 2; k++) {
+      double at = 720 - 4 * lon + (k ? 360 : -360);           // first guess: 6 h from solar noon
+      for (int it = 0; it < 3; it++) at = sunEventUtc(lt.tm_yday, ylen, lat, lon, k == 0, at, &pol);
+      ev[k] = at;
+    }
+    if (pol > 0) { cRise = 0; cSet = 1440; }                  // polar day: up all day
+    else if (pol < 0) { cRise = cSet = 720; }                 // polar night: down all day
+    else {
+      cRise = constrain((int)lround(ev[0] + off), 0, 1440);
+      cSet = constrain((int)lround(ev[1] + off), cRise, 1440);
+    }
+    dbg("time: sun %02d:%02d - %02d:%02d (%s)\n", cRise / 60, cRise % 60, cSet / 60, cSet % 60, ZONES[zone].city);
+  }
+  *riseMin = cRise;
+  *setMin = cSet;
+  return true;
 }
 
 void clockNoteSynced(ClockSource src) {
